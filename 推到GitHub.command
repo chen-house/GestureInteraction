@@ -3,6 +3,7 @@
 # 令牌只在你这台机器上，不会出现在聊天里，也不会被提交进仓库。
 cd "$(dirname "$0")"
 REPO="GestureInteraction"
+[ -f ".github-publish/config" ] && REPO=$(grep '^repo=' .github-publish/config | cut -d= -f2 || echo "GestureInteraction")
 TOKDIR=".github-publish"
 TOKFILE="$TOKDIR/token"
 
@@ -67,11 +68,15 @@ print(v if v is not None else '')"; }
 
 echo "→ 验证令牌…"
 USER=$(api https://api.github.com/user | jq1 login)
-if [ -z "$USER" ]; then
-  echo "   令牌无效或没权限读账号信息。"
-  echo "   把 $TOKDIR/token 删掉再跑一次，重新生成一个。"
-  echo; read -p "按回车关闭"; exit 1
+if [ -z "$USER" ] && [ -f "$TOKDIR/config" ]; then
+  USER=$(grep '^owner=' "$TOKDIR/config" | cut -d= -f2)
+  [ -n "$USER" ] && echo "   /user 读不到（细粒度令牌常见），用 config 里记的账号。"
 fi
+if [ -z "$USER" ]; then
+  printf "   读不到账号名。手动输入你的 GitHub 用户名： "
+  read USER
+fi
+if [ -z "$USER" ]; then echo "   没有账号名，退不下去了。"; echo; read -p "按回车关闭"; exit 1; fi
 echo "   账号：$USER"
 
 echo "→ 找仓库 $USER/$REPO …"
