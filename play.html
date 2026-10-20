@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>手势乐器 v26</title>
+<title>手势乐器 v27</title>
 <style>
   :root{ --ink:#e4e0d8; --paper:#121315; --line:#32343a; --dim:#8a8882;
          --hot:#e89254; --bar:62px; }
@@ -113,7 +113,7 @@
 <div id="gi-tab">‹</div>
 
 <div id="gi-side">
-  <h2>手势乐器 <span style="opacity:.35;font-weight:400">v26</span></h2>
+  <h2>手势乐器 <span style="opacity:.35;font-weight:400">v27</span></h2>
   <div>
     <div class="lab"><span>滑音</span><span id="gi-glideval">30 ms</span></div>
     <input id="gi-glide" type="range" min="0" max="400" step="10" value="30">
@@ -447,10 +447,14 @@ const LIBS = [
   "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1",
   "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35"
 ];
+/* 官方文档现在给的是 .../float16/latest/...（2026-10 核对过）。
+   原来写的 /float16/1/ 和 mediapipe-assets 这两个桶都不对外，
+   浏览器直接打开会收到 MissingSecurityHeader / Authorization —— 不是连不上，是地址不对。
+   Source: https://developers.google.com/edge/mediapipe/solutions/vision/hand_landmarker/index#models */
 const MODELS = [
   "./lib/hand_landmarker.task",          // 放在本地就先用本地，不用等网络
-  "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
-  "https://storage.googleapis.com/mediapipe-assets/hand_landmarker.task"
+  "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task",
+  "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
 ];
 /* 每一个来源都要有超时。没有超时的话，一个「连上了但不回数据」的源会一直挂着 ——
    fetch 既不成功也不失败，boot 就卡在那儿，屏幕上一直写着「首次约十几秒」。

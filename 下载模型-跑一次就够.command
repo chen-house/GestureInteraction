@@ -20,8 +20,8 @@ if [ -s "$DEST" ]; then
   rm -f "$DEST"
 fi
 
-URLS="https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task
-https://storage.googleapis.com/mediapipe-assets/hand_landmarker.task"
+URLS="https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task
+https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
 
 OK=0
 while IFS= read -r U; do
@@ -57,7 +57,7 @@ else
   echo "这台机器可能也连不到 storage.googleapis.com。"
   echo "可以换个网络再试，或者在浏览器里直接打开下面这个地址下载，"
   echo "然后把文件改名成 hand_landmarker.task 放进 lib/ 文件夹："
-  echo "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
+  echo "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task"
 fi
 echo
 read -p "按回车关闭"
