@@ -94,13 +94,16 @@ echo "→ 推送…"
 git remote remove origin 2>/dev/null
 git remote add origin "https://github.com/$USER/$REPO.git"
 # 令牌只在这一条命令里出现，不写进 .git/config
-if git push -u "https://x-access-token:$TOKEN@github.com/$USER/$REPO.git" main 2>&1 | sed 's/^/   /'; then
-  git branch --set-upstream-to=origin/main main >/dev/null 2>&1
-  echo "   推送完成。"
-else
+PUSHOUT=$(git push "https://x-access-token:$TOKEN@github.com/$USER/$REPO.git" main 2>&1)
+PUSHRC=$?
+echo "$PUSHOUT" | sed "s|$TOKEN|***|g" | sed 's/^/   /'
+if [ $PUSHRC -ne 0 ]; then
   echo "   推送失败，上面有原因。"
   echo; read -p "按回车关闭"; exit 1
 fi
+git fetch -q origin 2>/dev/null
+git branch --set-upstream-to=origin/main main >/dev/null 2>&1
+echo "   推送完成。"
 
 PRIVATE=$(api "https://api.github.com/repos/$USER/$REPO" | jq1 private)
 echo
