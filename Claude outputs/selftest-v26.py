@@ -1588,6 +1588,16 @@ await runA("模型：第一个源挂住 第二个源能救回来", async ()=>{
   if(fails.length !== 2) throw new Error("前两个源失败没记下来："+fails.join(" | "));
   if(!fails[1].includes("storage.googleapis.com")) throw new Error("失败记录里没写明是哪个源"); });
 
+await runA("模型：本地有就只读本地 一个外部地址都不碰", async ()=>{
+  globalThis.__cacheStore.clear(); globalThis.__fetched = []; globalThis.__fetchPlan = {};
+  globalThis.__fetchPlan["./lib/hand_landmarker.task"] = {status:200, bytes:7_800_000};
+  for(const u of MODELS.slice(1)) globalThis.__fetchPlan[u] = {status:200, bytes:7_800_000};
+  const buf = await loadModelBuffer([]);
+  if(!buf) throw new Error("本地有模型却没读到");
+  const outside = globalThis.__fetched.filter(u=>/^https?:/.test(u));
+  if(outside.length) throw new Error("本地有模型还去连了外网："+outside.join(" "));
+  if(globalThis.__fetched[0] !== "./lib/hand_landmarker.task")
+    throw new Error("第一个取的是 "+globalThis.__fetched[0]); });
 await runA("模型：拿到一次就进缓存 下次不再联网", async ()=>{
   globalThis.__cacheStore.clear(); globalThis.__fetchPlan = {};
   globalThis.__fetchPlan[MODELS[2]] = {status:200, bytes:7_800_000};
