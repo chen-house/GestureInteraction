@@ -1,0 +1,868 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>手势乐器</title>
+<style>
+  :root{ --ink:#1a1a1a; --paper:#f4f2ee; --line:#cfcbc3; }
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; }
+  body{ margin:0; background:var(--paper); color:var(--ink); overflow:hidden;
+        font:12px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace; }
+  #gi-cv{ display:block; position:fixed; inset:0; width:100vw; height:100vh; }
+
+  #gi-side{ position:fixed; top:0; right:0; width:230px; height:100%;
+    padding:22px 20px; background:rgba(244,242,238,.9);
+    border-left:1px solid var(--line); backdrop-filter:blur(6px);
+    display:flex; flex-direction:column; gap:15px; overflow:auto;
+    transition:transform .22s ease; opacity:.6; }
+  #gi-side:hover{ opacity:1; }
+  body.folded #gi-side{ transform:translateX(230px); }
+  #gi-tab{ position:fixed; top:22px; right:230px; z-index:2; width:22px; height:26px;
+    border:1px solid var(--line); border-right:none; border-radius:3px 0 0 3px;
+    background:rgba(244,242,238,.9); cursor:pointer; opacity:.45;
+    display:flex; align-items:center; justify-content:center; transition:right .22s ease; }
+  #gi-tab:hover{ opacity:1; }
+  body.folded #gi-tab{ right:0; }
+
+  h2{ font-size:11px; font-weight:400; letter-spacing:.12em; opacity:.4; margin:0; }
+  .lab{ display:flex; justify-content:space-between; align-items:baseline; opacity:.5; }
+  .sec{ border-top:1px solid var(--line); padding-top:12px; }
+  input[type=range]{ -webkit-appearance:none; appearance:none; width:100%; height:18px;
+    background:none; margin:2px 0 0; cursor:pointer; }
+  input[type=range]::-webkit-slider-runnable-track{ height:1px; background:var(--line); }
+  input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; width:9px; height:9px;
+    border-radius:50%; background:var(--ink); margin-top:-4px; }
+  input[type=range]::-moz-range-track{ height:1px; background:var(--line); }
+  input[type=range]::-moz-range-thumb{ width:9px; height:9px; border:none;
+    border-radius:50%; background:var(--ink); }
+  .note{ font-size:10.5px; opacity:.5; line-height:1.95; }
+  kbd{ font:inherit; border:1px solid var(--line); border-radius:2px; padding:0 3px; }
+  #gi-dbg{ font-size:10px; opacity:.5; white-space:pre-wrap; line-height:1.7; display:none; }
+  #gi-msg{ font-size:10.5px; color:#8a3a2a; white-space:pre-wrap; line-height:1.6; }
+
+  #gi-hint{ position:fixed; left:34px; top:28px; z-index:9; font-size:11px; opacity:.45;
+    padding:5px 11px; border:1px solid var(--line); border-radius:3px;
+    background:rgba(244,242,238,.85); pointer-events:none; transition:opacity .4s; }
+  #gi-hint.gone{ opacity:0; }
+  /* 提示是一条顶栏，不是拦路的整屏 —— 下面的乐器照常能看能用 */
+  #gi-block{ position:fixed; left:0; right:0; top:0; z-index:20;
+    background:rgba(244,242,238,.96); border-bottom:1px solid var(--line);
+    padding:9px 44px 9px 18px; font-size:11.5px; line-height:1.8; color:#8a3a2a; }
+  #gi-block b{ font-weight:400; }
+  #gi-block code{ background:rgba(26,26,26,.06); padding:1px 5px; border-radius:2px; }
+  #gi-x{ position:absolute; right:14px; top:7px; cursor:pointer; opacity:.5;
+    font-size:14px; line-height:1; padding:3px 5px; }
+  #gi-x:hover{ opacity:1; }
+</style>
+</head>
+<body>
+
+<canvas id="gi-cv"></canvas>
+<div id="gi-tab">‹</div>
+
+<div id="gi-side">
+  <h2>手势乐器</h2>
+  <div>
+    <div class="lab"><span>滑音</span><span id="gi-glideval">30 ms</span></div>
+    <input id="gi-glide" type="range" min="0" max="400" step="10" value="30">
+  </div>
+  <div>
+    <div class="lab"><span>速度</span><span id="gi-bpmval">100 BPM</span></div>
+    <input id="gi-bpm" type="range" min="60" max="160" step="1" value="100">
+  </div>
+  <div>
+    <div class="lab"><span>音色</span><span></span></div>
+    <select id="gi-tone" style="width:100%;font:inherit;background:none;border:1px solid var(--line);
+      border-radius:2px;padding:3px 4px;color:inherit;margin-top:3px">
+      <option value="0">纯净 · 正弦</option>
+      <option value="1" selected>柔和 · 三角</option>
+      <option value="2">人声 · 近似真琴</option>
+      <option value="3">明亮 · 锯齿</option>
+    </select>
+  </div>
+  <div>
+    <div class="lab"><span>音阶吸附</span><span id="gi-snapval">60%</span></div>
+    <input id="gi-snap" type="range" min="0" max="100" step="5" value="60">
+  </div>
+  <div class="sec note">
+    <b>右手 · 特雷门琴</b><br>
+    <b>手放在屏幕右半边</b>（音阶那侧）<br>
+    上下移动 → 音高<br>
+    <b>左右移动 → 音量大小</b>（越往外越大）<br>
+    <b>握拳 → 立刻切断</b>，张手恢复<br><br>
+    <b>左手 · 乐队</b><br>
+    <b>手放在屏幕左半边</b>（乐器那侧）<br>
+    自然张开 → 全部声部都响<br>
+    收起某根手指 → 关掉那一组<br>
+    半伸 → 半音量
+  </div>
+  <div class="sec">
+    <label style="display:flex;justify-content:space-between;cursor:pointer;opacity:.6">
+      <span>摄像头</span>
+      <input id="gi-cam" type="checkbox" checked style="accent-color:#1a1a1a">
+    </label>
+  </div>
+  <div id="gi-dbg" class="sec"></div>
+  <div id="gi-msg"></div>
+</div>
+
+<div id="gi-hint">点一下任意位置开声音</div>
+<div id="gi-block" hidden><span id="gi-x">×</span>
+  <b>摄像头用不了</b> —— <code>file://</code> 打开的页面拿不到摄像头权限，这是浏览器的规定。
+  双击文件夹里的 <b>启动.command</b>，或访问 <code>http://localhost:4173/play.html</code>。
+</div>
+
+<script type="module">
+/* ── 以下为 sound-design-site/assets/js/samba.js 的纯合成部分，机械抽取后内联。原文件未改动。 ── */
+/* samba-core.js — 从 sound-design-site/assets/js/samba.js 提取的纯合成部分。
+   只含发声函数与节奏图案，不含任何 DOM 与调度。原文件未改动。 */
+
+let _noiseBuf = null;
+function noiseBuf(ctx) {
+  if (_noiseBuf) return _noiseBuf;
+  const n = ctx.sampleRate * 2;
+  const b = ctx.createBuffer(1, n, ctx.sampleRate);
+  const d = b.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+  _noiseBuf = b;
+  return b;
+}
+function noiseSrc(ctx) {
+  const s = ctx.createBufferSource();
+  s.buffer = noiseBuf(ctx);
+  s.loop = true;
+  return s;
+}
+
+/* ---------- 基础发声块（与 drums.js 同源） ---------- */
+
+// 膜鼓音：正弦基频带音高包络
+function membrane(ctx, t, out, { f0, f1, dec, gain = 1, type = 'sine' }) {
+  const o = ctx.createOscillator();
+  o.type = type;
+  o.frequency.setValueAtTime(f0, t);
+  o.frequency.exponentialRampToValueAtTime(Math.max(f1, 0.0001), t + dec * 0.85);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(gain, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dec);
+  o.connect(g).connect(out);
+  o.start(t);
+  o.stop(t + dec + 0.05);
+}
+
+// 噪声击：滤波后短噪声（敲击、响弦、沙锤、刮擦）
+function noiseHit(ctx, t, out, { type = 'highpass', freq = 4000, Q = 0.7, gain = 0.5, dec = 0.05, attack = 0.001 }) {
+  const n = noiseSrc(ctx);
+  const f = ctx.createBiquadFilter();
+  f.type = type;
+  f.frequency.value = freq;
+  f.Q.value = Q;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(gain, t + attack);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dec);
+  n.connect(f).connect(g).connect(out);
+  n.start(t);
+  n.stop(t + dec + 0.05);
+}
+
+// 钟铃音（agogô）：少数正弦泛音快速衰减
+function bell(ctx, t, out, { freq, dec = 0.4, gain = 0.16 }) {
+  const ratios = [1, 2.0, 2.99];
+  const rg = [1, 0.4, 0.18];
+  ratios.forEach((r, i) => {
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.value = freq * r;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(gain * rg[i], t + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dec * (1 - i * 0.18));
+    o.connect(g).connect(out);
+    o.start(t);
+    o.stop(t + dec + 0.05);
+  });
+}
+
+// cuíca 摩擦鼓「呜-呃」：锯齿音高滑动经带通 —— 合成近似
+function cuicaCry(ctx, t, out, { f0, f1, dec = 0.22, gain = 0.22 }) {
+  const o = ctx.createOscillator();
+  o.type = 'sawtooth';
+  o.frequency.setValueAtTime(f0, t);
+  o.frequency.linearRampToValueAtTime(f1, t + dec * 0.8);
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = 680;
+  bp.Q.value = 3.5;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(gain, t + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dec);
+  o.connect(bp).connect(g).connect(out);
+  o.start(t);
+  o.stop(t + dec + 0.05);
+}
+
+// reco-reco 刮器：一串极短颗粒噪声模拟「咔啦」刮擦 —— 合成近似
+function recoScrape(ctx, t, out) {
+  for (let i = 0; i < 6; i++) {
+    noiseHit(ctx, t + i * 0.013, out, { type: 'bandpass', freq: 3000, Q: 1.3, gain: 0.11, dec: 0.012 });
+  }
+}
+
+/* ---------- 各声部单击合成 ---------- */
+const HIT = {
+  // 低音：surdo 大鼓 —— 开音(o) / 闷音(m)
+  surdoOpen(ctx, t, out) {
+    membrane(ctx, t, out, { f0: 96, f1: 54, dec: 0.5, gain: 1 });
+    noiseHit(ctx, t, out, { type: 'highpass', freq: 1500, gain: 0.14, dec: 0.012 });
+  },
+  surdoMute(ctx, t, out) {
+    membrane(ctx, t, out, { f0: 90, f1: 64, dec: 0.13, gain: 0.55 });
+  },
+  // 中音：caixa 响弦鼓 —— 普通(c) / 重音(a)
+  caixa(ctx, t, out) {
+    membrane(ctx, t, out, { f0: 250, f1: 230, dec: 0.04, gain: 0.12, type: 'triangle' });
+    noiseHit(ctx, t, out, { type: 'highpass', freq: 2000, Q: 0.7, gain: 0.26, dec: 0.035 });
+  },
+  caixaAccent(ctx, t, out) {
+    membrane(ctx, t, out, { f0: 250, f1: 225, dec: 0.05, gain: 0.16, type: 'triangle' });
+    noiseHit(ctx, t, out, { type: 'highpass', freq: 1800, Q: 0.7, gain: 0.5, dec: 0.06 });
+  },
+  // 中音：repinique 领奏鼓 —— 尖锐穿透
+  repique(ctx, t, out) {
+    membrane(ctx, t, out, { f0: 420, f1: 300, dec: 0.10, gain: 0.5, type: 'triangle' });
+    noiseHit(ctx, t, out, { type: 'highpass', freq: 2600, gain: 0.35, dec: 0.05 });
+  },
+  // 高音：tamborim 手鼓 —— 极短「嗒」
+  tamborim(ctx, t, out) {
+    membrane(ctx, t, out, { f0: 470, f1: 430, dec: 0.04, gain: 0.32, type: 'triangle' });
+    noiseHit(ctx, t, out, { type: 'highpass', freq: 4500, gain: 0.3, dec: 0.03 });
+  },
+  // 高音：chocalho 摇铃 —— 沙锤「唰」
+  chocalho(ctx, t, out) {
+    noiseHit(ctx, t, out, { type: 'highpass', freq: 6500, Q: 0.6, gain: 0.2, dec: 0.045 });
+  },
+  // 高音：agogô 双音铃 —— 高(h) / 低(l)
+  agogoHi(ctx, t, out) { bell(ctx, t, out, { freq: 900, dec: 0.32, gain: 0.15 }); },
+  agogoLo(ctx, t, out) { bell(ctx, t, out, { freq: 680, dec: 0.38, gain: 0.16 }); },
+  // 高音：cuíca 摩擦鼓 —— 升(u) / 降(d)
+  cuicaUp(ctx, t, out)   { cuicaCry(ctx, t, out, { f0: 260, f1: 540, dec: 0.2 }); },
+  cuicaDown(ctx, t, out) { cuicaCry(ctx, t, out, { f0: 540, f1: 250, dec: 0.22 }); },
+  // 高音：reco-reco 刮器
+  reco(ctx, t, out) { recoScrape(ctx, t, out); },
+};
+
+const PATTERN = {
+  // surdo：锚在拍 2、拍 4 的重开音(o)，前面 16 分垫一记闷音(m) —— 桑巴的「in 2」心跳
+  surdo:     { 3: 'm', 4: 'o', 11: 'm', 12: 'o' },
+  // caixa：连续 16 分铺底，'a' 的位置(每拍最后一个 16 分)给重音
+  caixa:     { 0:'c',1:'c',2:'c',3:'a',4:'c',5:'c',6:'c',7:'a',8:'c',9:'c',10:'c',11:'a',12:'c',13:'c',14:'c',15:'a' },
+  // repinique：稀疏领奏 + 句尾小过门
+  repinique: { 0: 'x', 7: 'x', 14: 'x', 15: 'x' },
+  // tamborim：teleco-teco 切分，高频咬住反拍
+  tamborim:  { 0: 'x', 3: 'x', 4: 'x', 7: 'x', 8: 'x', 11: 'x', 14: 'x' },
+  // chocalho：整排 16 分摇，制造摇摆 wash
+  chocalho:  { 0:'x',1:'x',2:'x',3:'x',4:'x',5:'x',6:'x',7:'x',8:'x',9:'x',10:'x',11:'x',12:'x',13:'x',14:'x',15:'x' },
+  // agogô：高低铃交替的固定音型
+  agogo:     { 0: 'l', 2: 'h', 3: 'h', 6: 'l', 8: 'h', 10: 'h', 11: 'h', 14: 'l' },
+  // cuíca：即兴「呜呃」点缀在反拍
+  cuica:     { 4: 'u', 6: 'd', 12: 'u', 14: 'd' },
+  // reco-reco：刮擦垫在每个正拍之前（每拍最后一个 16 分）
+  reco:      { 3: 'x', 7: 'x', 11: 'x', 15: 'x' },
+};
+
+// 代码 → 发声函数
+const VOICE = {
+  surdo:     { o: 'surdoOpen', m: 'surdoMute' },
+  caixa:     { c: 'caixa', a: 'caixaAccent' },
+  repinique: { x: 'repique' },
+  tamborim:  { x: 'tamborim' },
+  chocalho:  { x: 'chocalho' },
+  agogo:     { h: 'agogoHi', l: 'agogoLo' },
+  cuica:     { u: 'cuicaUp', d: 'cuicaDown' },
+  reco:      { x: 'reco' },
+};
+
+const LAYERS = ['surdo', 'caixa', 'repinique', 'tamborim', 'chocalho', 'agogo', 'cuica', 'reco'];
+/* ── 合成部分结束 ── */
+
+/* 本地优先：CDN 的模块导入可能被浏览器的脚本来源策略拦掉
+   （fetch 能通、import 不通就是这个症状），本地文件没有这个问题。 */
+const LIBS = [
+  "./lib",
+  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1",
+  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35"
+];
+const MODELS = [
+  "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+  "https://storage.googleapis.com/mediapipe-assets/hand_landmarker.task"
+];
+
+const CN = { surdo:"surdo", caixa:"caixa", repinique:"repinique", tamborim:"tamborim",
+             chocalho:"chocalho", agogo:"agogô", cuica:"cuíca", reco:"reco-reco" };
+/* 五根手指 ← 五组声部，按音高从低到高排（samba.js 原注释就是低→中→高）。
+   8 件归 5 组，因为高频那几件听感本来就接近，而手只有五根指头。 */
+const GROUPS = [
+  { finger:"小指", fi:4, name:"surdo",     layers:["surdo"],                   size:1.00 },
+  { finger:"无名", fi:3, name:"caixa",     layers:["caixa"],                   size:0.74 },
+  { finger:"中指", fi:2, name:"repinique", layers:["repinique"],               size:0.62 },
+  { finger:"食指", fi:1, name:"tamborim",  layers:["tamborim","agogo"],        size:0.48 },
+  { finger:"拇指", fi:0, name:"chocalho",  layers:["chocalho","cuica","reco"], size:0.38 }
+];
+/* 每根手指的关节链（腕, MCP, PIP, DIP, TIP） */
+const FINGER_IDX = [[0,1,2,3,4],[0,5,6,7,8],[0,9,10,11,12],[0,13,14,15,16],[0,17,18,19,20]];
+/* 吸附用 C 大调，和画面上标出来的七条自然音线一一对应。
+   原来用五声音阶（缺 F 和 B），所以 F 永远吸不到。 */
+const SCALE = [0,2,4,5,7,9,11];
+
+const PALMPTS = [0,5,9,13,17], PALM_POLY = [0,1,5,9,13,17];
+const CHAINS = [[0,1,2,3,4],[0,5,6,7,8],[0,9,10,11,12],[0,13,14,15,16],[0,17,18,19,20]];
+const NAMES = ["C","C♯","D","D♯","E","F","F♯","G","G♯","A","A♯","B"];
+
+/* 特雷门琴：演奏区 = 画面中间 60%，一个八度 C4–C5 */
+const FIELD=0.60, LO=(1-FIELD)/2, HI=LO+FIELD, MIDI_LO=60, SEMIS=12;
+/* 左边 56% 是乐器台，右边 40% 留给特雷门琴，中间一条空隙互不干扰。
+   按「手在哪个区」分工，不按「哪只手」—— 避免左右手判错。 */
+const DECK_X1 = 0.56, TV_X0 = 0.60;
+
+/* 音量拆成两件事，各用各擅长的输入：
+   · 手在右区的水平位置 → 音量大小（大关节，能稳定停住，可以做渐强渐弱）
+   · 握拳 → 瞬时切断（离散动作，干净、可靠，用来断句和休止）
+   半张开的手做不了连续音量 —— 那是共收缩姿势，手会酸，识别也最差。 */
+const VOL_X0 = TV_X0 + 0.05;
+
+const cv = document.getElementById("gi-cv"), ctx = cv.getContext("2d");
+const $ = id => document.getElementById("gi-" + id);
+const cl = (v,a=0,b=1) => v<a?a:v>b?b:v;
+
+const level = LAYERS.map(()=>1);      // 每件乐器的音量 0..1
+const pulse = LAYERS.map(()=>0);
+const S = { glide:0.030, bpm:100, tone:1, soundMidi:60, lastT:0,
+            right:null, left:null, nHands:0,
+            midi:60, tvVol:0, open:0, openRaw:0, xLevel:0, snap:0.6, fing:[1,1,1,1,1], beat:0, rT:-1e9, lT:-1e9, rKeep:null, lKeep:null,
+            lib:"—", libErr:"", fps:0, infer:0, drawMs:0 };
+
+/* ── 声音 ───────────────────────────────── */
+let AC=null, master=null, osc=null, tvGain=null, tvFilter=null, vibLfo=null, vibAmt=null,
+    busses=null, seqT=null, step=0, nextT=0;
+/* 四个音色：振荡器波形 + 低通截止 + 颤音深度（相对基频的比例） */
+const TONES = [
+  { name:"纯净", type:"sine",     cut:20000, vib:0.000 },
+  { name:"柔和", type:"triangle", cut:4000,  vib:0.004 },
+  { name:"人声", type:"sawtooth", cut:1400,  vib:0.009 },
+  { name:"明亮", type:"sawtooth", cut:6500,  vib:0.003 }
+];
+function applyTone(){
+  if(!osc) return;
+  const t = TONES[S.tone] || TONES[1];
+  osc.type = t.type;
+  tvFilter.frequency.setTargetAtTime(t.cut, AC.currentTime, 0.02);
+}
+async function audio(){
+  if(!AC){
+    AC = new (window.AudioContext||window.webkitAudioContext)({latencyHint:"interactive"});
+    master = AC.createGain(); master.gain.value = 0.8; master.connect(AC.destination);
+    osc = AC.createOscillator();
+    tvFilter = AC.createBiquadFilter(); tvFilter.type = "lowpass"; tvFilter.Q.value = 0.7;
+    tvGain = AC.createGain(); tvGain.gain.value = 0;
+    osc.connect(tvFilter).connect(tvGain).connect(master); osc.start();
+    /* 颤音：低频振荡器去推主振荡器的频率。真特雷门琴的「人声感」主要来自这个 */
+    vibLfo = AC.createOscillator(); vibLfo.type="sine"; vibLfo.frequency.value = 5.5;
+    vibAmt = AC.createGain(); vibAmt.gain.value = 0;
+    vibLfo.connect(vibAmt).connect(osc.frequency); vibLfo.start();
+    applyTone();
+    busses = LAYERS.map(() => { const g = AC.createGain(); g.gain.value = 1; g.connect(master); return g; });
+  }
+  if(AC.state !== "running"){ try{ await AC.resume(); }catch(e){} }
+  if(!seqT){ nextT = AC.currentTime + 0.06; seqT = setInterval(sched, 25); }
+}
+const stepDur = () => (60/S.bpm)/4;
+function sched(){
+  if(!AC) return;
+  while(nextT < AC.currentTime + 0.12){
+    const st = step, t = nextT;
+    LAYERS.forEach((L,i) => {
+      if(level[i] < 0.02) return;
+      const code = PATTERN[L][st]; if(!code) return;
+      const fn = VOICE[L][code]; if(!fn || !HIT[fn]) return;
+      busses[i].gain.setTargetAtTime(level[i], t, 0.01);
+      HIT[fn](AC, t, busses[i]);
+      setTimeout(() => { pulse[i] = 1; }, Math.max(0,(t-AC.currentTime)*1000));
+    });
+    if(st % 4 === 0) setTimeout(()=>{ S.beat = 1; }, Math.max(0,(t-AC.currentTime)*1000));
+    nextT += stepDur(); step = (step+1)%16;
+  }
+}
+function applyTheremin(midi, vol){
+  if(!AC || AC.state!=="running") return;
+  const f = 440*Math.pow(2,(midi-69)/12);
+  osc.frequency.setTargetAtTime(f, AC.currentTime, Math.max(0.0005,S.glide));
+  vibAmt.gain.setTargetAtTime(f * (TONES[S.tone]||TONES[1]).vib, AC.currentTime, 0.05);
+  tvGain.gain.setTargetAtTime(vol*0.22, AC.currentTime, 0.030);
+}
+
+/* ── 画布 ───────────────────────────────── */
+let DPR=1;
+function resize(){ DPR=Math.min(2,devicePixelRatio||1);
+  cv.width=Math.round(innerWidth*DPR); cv.height=Math.round(innerHeight*DPR); }
+addEventListener("resize", resize); resize();
+/* 舞台就是可用区域本身，不再强行套 4:3 —— 之前在窄窗口里会缩成一小块，
+   周围全是空白。手的坐标本来就是归一化的，铺满即可。 */
+function stage(){
+  const pad=(document.body.classList.contains("folded")?24:244)*DPR;
+  const m=34*DPR;
+  return { x:m, y:m, w:Math.max(200*DPR, cv.width-pad-m), h:Math.max(160*DPR, cv.height-m*2) };
+}
+
+/* ── 识别 ───────────────────────────────── */
+let landmarker=null, video=null, lastTs=-1, camStream=null, camOn=true;
+async function startCam(){
+  if(camStream) return;
+  camStream = await navigator.mediaDevices.getUserMedia({
+    video:{ width:{ideal:640}, height:{ideal:480}, frameRate:{ideal:60}, facingMode:"user" }, audio:false });
+  if(!video){
+    video = document.createElement("video");
+    video.playsInline = true; video.muted = true;
+  }
+  video.srcObject = camStream;
+  await video.play();
+  camOn = true;
+  pump();
+}
+function stopCam(){
+  camOn = false;
+  if(camStream){ camStream.getTracks().forEach(t=>t.stop()); camStream = null; }
+  if(video) video.srcObject = null;
+  S.right = S.left = S.rKeep = S.lKeep = null;
+  S.nHands = 0; S.tvVol = 0;
+}
+async function boot(){
+  S.lib = "载入中";
+  const fails=[];
+  for(const lib of LIBS){
+    let FR,HL,fs;
+    try{ ({FilesetResolver:FR, HandLandmarker:HL} = await import(lib+"/vision_bundle.mjs"));
+         fs = await FR.forVisionTasks(lib+"/wasm"); }
+    catch(e){ fails.push(lib+" 库 → "+e.message); S.libErr=S.libErr||("本地库没用上："+e.message); continue; }
+    for(const url of MODELS){
+      try{
+        landmarker = await HL.createFromOptions(fs, {
+          baseOptions:{ modelAssetPath:url, delegate:"GPU" },
+          runningMode:"VIDEO", numHands:2,
+          minHandDetectionConfidence:0.5, minHandPresenceConfidence:0.5, minTrackingConfidence:0.5 });
+        S.lib = lib.startsWith("./")?"本地":lib.split("@").pop(); break;
+      }catch(e){ fails.push(lib+" + 模型 → "+e.message); }
+    }
+    if(landmarker) break;
+  }
+  if(!landmarker) throw new Error("模型加载全部失败：\n"+fails.join("\n"));
+  await startCam();
+}
+let fC=0, fT=performance.now();
+function pump(){
+  if(pump.running) return; pump.running = true;
+  const s = () => {
+    if(!camOn || !video){ pump.running=false; return; }
+    if(video.readyState>=2){
+      const ts=Math.max(lastTs+1,Math.round(performance.now())); lastTs=ts;
+      const t0=performance.now(); let res=null;
+      try{ res = landmarker.detectForVideo(video, ts); }catch(e){ $("msg").textContent="识别出错："+e.message; }
+      S.infer = S.infer*0.9 + (performance.now()-t0)*0.1;
+      read(res);
+      fC++; const dt=performance.now()-fT;
+      if(dt>500){ S.fps=fC*1000/dt; fC=0; fT=performance.now(); }
+    }
+    if(video.requestVideoFrameCallback) video.requestVideoFrameCallback(s); else requestAnimationFrame(s);
+  };
+  s();
+}
+
+/* 五指伸展度：指尖离腕的距离减去中节离腕的距离，再除以掌长。
+   伸直为正，蜷起接近 0。掌面始终朝镜头，识别最稳。 */
+function fingerExt(lm, f){
+  const plen = Math.hypot(lm[9].x-lm[0].x, lm[9].y-lm[0].y) || 1e-6;
+  if(f === 0){
+    /* 拇指是横着张的，不是伸直的 —— 用「指尖到食指根的距离」判，
+       收进掌心时这个距离明显变小。用其余四指那套腕距公式对拇指本来就不成立。 */
+    const d = Math.hypot(lm[4].x-lm[5].x, lm[4].y-lm[5].y)/plen;
+    return cl((d - 0.35)/0.55);
+  }
+  const I = FINGER_IDX[f];
+  const dTip = Math.hypot(lm[I[4]].x-lm[0].x, lm[I[4]].y-lm[0].y);
+  const dPip = Math.hypot(lm[I[2]].x-lm[0].x, lm[I[2]].y-lm[0].y);
+  return cl(((dTip - dPip)/plen - 0.10)/0.85);
+}
+/* 张开度：四指平均。上限自动标定 —— 每个人手不一样，写死的区间不可能对。
+   底部留死区，保证握拳一定归零。 */
+let openMax = 0.45;
+function openness(lm){
+  let a=0; for(let f=1; f<5; f++) a += fingerExt(lm,f);
+  a /= 4;
+  S.openRaw = a;
+  openMax = Math.max(openMax*0.9997, a);
+  const n = cl(a/openMax);
+  return n < 0.30 ? 0 : cl((n-0.30)/0.70);
+}
+
+/* 左右手完全按「在屏幕哪一边」判定，不用 MediaPipe 的左右标签 ——
+   标签的镜像约定我试错过两次，而画面本身已经是镜像的：
+   你的右手就出现在屏幕右边，这是你眼睛能直接确认的，没有歧义。
+   右区（音阶那侧）的手 = 特雷门琴；左区（乐器那侧）的手 = 乐队。
+   丢一两帧不清空，保持 HOLD 毫秒，避免「忽有忽无」。 */
+const HOLD = 250;
+function read(res){
+  const all=(res&&res.landmarks)||[];
+  S.nHands=all.length;
+  const now=performance.now();
+  let tv=null, bd=null;
+  for(const lm of all){
+    let px=0,py=0; for(const j of PALMPTS){ px+=lm[j].x; py+=lm[j].y; }
+    const h={ x:1-px/PALMPTS.length, y:py/PALMPTS.length, lm };
+    if(h.x >= TV_X0){ if(!tv || h.x>tv.x) tv=h; }
+    else            { if(!bd || h.x<bd.x) bd=h; }
+  }
+  if(tv){ S.right=tv; S.rKeep=tv; S.rT=now; }
+  if(bd){ S.left=bd;  S.lKeep=bd; S.lT=now; }
+  if(!tv) S.right = (now-S.rT<HOLD) ? S.rKeep : (S.rKeep=null);
+  if(!bd) S.left  = (now-S.lT<HOLD) ? S.lKeep : (S.lKeep=null);
+}
+
+/* ── 手形 ─────────────────────────────────
+   三条设计约束，都是上一版踩出来的：
+   1) 不填纸色 —— 填了就把背景整块挡住。改成纯线描，刻度从手里透出来。
+   2) 等比画 —— 舞台不是 4:3，直接用 X()/Y() 会把手拉成怪形状。
+      位置仍用 X()/Y()（这样四角都够得到），但形状用同一个缩放比画。
+   3) 限尺寸 —— 手离镜头近时会占满全屏。掌长超过上限就整体缩回去。 */
+function drawHand(lm, X, Y, alpha, R){
+  if(!lm) return;
+  let cxN=0, cyN=0;
+  for(const i of PALMPTS){ cxN+=lm[i].x; cyN+=lm[i].y; }
+  cxN/=PALMPTS.length; cyN/=PALMPTS.length;
+  const cx = X(1-cxN), cy = Y(cyN);
+
+  const span = Math.hypot(lm[9].x-lm[0].x, lm[9].y-lm[0].y) || 1e-6;
+  const base = Math.min(R.w, R.h);
+  const cap  = base * 0.16;                       // 掌长最多占短边的 16%
+  const k2   = Math.min(base, cap / span);        // 等比缩放，超了就缩
+
+  const P = i => [cx + (-(lm[i].x - cxN)) * k2, cy + (lm[i].y - cyN) * k2];
+  const thick = span * k2 * 0.22;
+
+  ctx.lineJoin = ctx.lineCap = "round";
+  ctx.beginPath();
+  PALM_POLY.forEach((i,n)=>{ const [x,y]=P(i); n?ctx.lineTo(x,y):ctx.moveTo(x,y); });
+  ctx.closePath();
+  for(const ch of CHAINS){
+    const [x0,y0]=P(ch[0]); ctx.moveTo(x0,y0);
+    for(let n=1;n<ch.length;n++){ const [x,y]=P(ch[n]); ctx.lineTo(x,y); }
+  }
+  ctx.strokeStyle = `rgba(26,26,26,${alpha})`;
+  ctx.lineWidth = Math.max(1.2*DPR, thick*0.16);
+  ctx.stroke();
+  /* 掌心一个实点：手再淡，位置也要一眼看得见 */
+  ctx.fillStyle = `rgba(26,26,26,${Math.min(0.9, alpha+0.25)})`;
+  ctx.beginPath(); ctx.arc(cx, cy, Math.max(2.5*DPR, thick*0.30), 0, 7); ctx.fill();
+}
+
+/* ── 线描乐器 ───────────────────────────── */
+function inst(name, cx, cy, r){
+  const p=new Path2D();
+  const cyl=(w,h)=>{ const rx=r*w, ry=r*w*0.30, y0=cy-r*h/2, y1=cy+r*h/2;
+    p.moveTo(cx-rx,y0); p.ellipse(cx,y0,rx,ry,0,0,Math.PI*2);
+    p.moveTo(cx-rx,y0); p.lineTo(cx-rx,y1);
+    p.moveTo(cx+rx,y0); p.lineTo(cx+rx,y1);
+    p.moveTo(cx-rx,y1); p.ellipse(cx,y1,rx,ry,0,0,Math.PI,false);
+    return {rx,ry,y0,y1}; };
+  if(name==="surdo"){ const c=cyl(0.62,1.1);
+    p.moveTo(cx-c.rx,c.y0+r*0.12); p.lineTo(cx-c.rx-r*0.28,cy); p.lineTo(cx-c.rx,c.y1-r*0.12); }
+  else if(name==="caixa"){ const c=cyl(0.55,0.5);
+    for(let i=-1;i<=1;i++){ p.moveTo(cx-c.rx,c.y1+i*r*0.06); p.lineTo(cx+c.rx,c.y1+i*r*0.06); } }
+  else if(name==="repinique"){ cyl(0.40,0.8); }
+  else if(name==="tamborim"){ p.moveTo(cx+r*0.42,cy-r*0.1); p.ellipse(cx,cy-r*0.1,r*0.42,r*0.42,0,0,Math.PI*2);
+    p.moveTo(cx+r*0.32,cy-r*0.1); p.ellipse(cx,cy-r*0.1,r*0.32,r*0.32,0,0,Math.PI*2);
+    p.moveTo(cx+r*0.30,cy+r*0.22); p.lineTo(cx+r*0.72,cy+r*0.66); }
+  else if(name==="chocalho"){ const w=r*0.40,h=r*0.46;
+    p.rect(cx-w,cy-h,w*2,h*1.7);
+    for(let i=-1;i<=1;i++){ p.moveTo(cx+i*w*0.66,cy-h); p.lineTo(cx+i*w*0.66,cy+h*0.7); }
+    p.moveTo(cx-w*0.3,cy+h*0.7); p.lineTo(cx-w*0.3,cy+h*1.2);
+    p.moveTo(cx+w*0.3,cy+h*0.7); p.lineTo(cx+w*0.3,cy+h*1.2); }
+  else if(name==="agogo"){ for(const s of [-1,1]){ const x=cx+s*r*0.33;
+      p.moveTo(x-r*0.21,cy-r*0.40); p.lineTo(x+r*0.21,cy-r*0.40);
+      p.lineTo(x+r*0.09,cy+r*0.28); p.lineTo(x-r*0.09,cy+r*0.28); p.closePath(); }
+    p.moveTo(cx-r*0.33,cy+r*0.28); p.quadraticCurveTo(cx,cy+r*0.72,cx+r*0.33,cy+r*0.28); }
+  else if(name==="cuica"){ const c=cyl(0.50,0.7);
+    p.moveTo(cx,c.y0); p.lineTo(cx,cy-r*0.92); }
+  else { const c=cyl(0.52,0.58);
+    for(let i=-2;i<=2;i++){ p.moveTo(cx+i*c.rx*0.34,c.y0+c.ry*0.6); p.lineTo(cx+i*c.rx*0.34,c.y1-c.ry*0.6); }
+    p.moveTo(cx+c.rx*0.2,c.y0-r*0.26); p.lineTo(cx+c.rx*1.05,c.y1+r*0.06); }
+  return p;
+}
+
+/* ── 画面 ───────────────────────────────── */
+function draw(){
+  const t0=performance.now();
+  ctx.clearRect(0,0,cv.width,cv.height);
+  const R=stage(), k=DPR;
+  const X=u=>R.x+u*R.w, Y=u=>R.y+u*R.h;
+
+  /* ---- 左手：五指伸展度 → 五组音量。自然张开 = 全响，收起手指才关。 ---- */
+  if(!S.left){
+    /* 手不在识别区就不该有声音 —— 页面一加载就自己敲鼓是不对的 */
+    for(let i=0;i<level.length;i++) level[i] = 0;
+    for(let f=0; f<5; f++) S.fing[f] = 0;
+  } else {
+    for(let f=0; f<5; f++) S.fing[f] = fingerExt(S.left.lm, f);
+    GROUPS.forEach(g => g.layers.forEach(L => { level[LAYERS.indexOf(L)] = S.fing[g.fi]; }));
+  }
+
+  /* ---- 右手：特雷门琴 ---- */
+  if(S.right){
+    const n = cl((S.right.y - LO)/FIELD);
+    let raw = MIDI_LO + (1-n)*SEMIS;
+    if(S.snap > 0){                       // 吸附到五声音阶，自由滑音在强节奏上会显得没骨头
+      const pc = ((raw - MIDI_LO) % 12 + 12) % 12;
+      let best = SCALE[0], bd = 99;
+      for(const d of SCALE.concat([12])){ const dd = Math.abs(pc-d); if(dd<bd){bd=dd; best=d;} }
+      const snapped = raw - pc + best;
+      raw = raw + (snapped - raw) * S.snap;
+    }
+    S.midi = raw;
+    const now = performance.now();
+    const dt  = S.lastT ? Math.min(0.1, (now-S.lastT)/1000) : 0.016;
+    S.lastT = now;
+    const a = 1 - Math.exp(-dt/Math.max(0.0005, S.glide));
+    S.soundMidi += (S.midi - S.soundMidi) * a;
+    S.open = openness(S.right.lm);
+    /* 下限 0.3：手只要进了右区就该听得见，往外移才变大。
+       原来内侧映射到 0，手停在区内偏左时音量几乎是 0，听上去就是「没声音」。 */
+    S.xLevel = 0.3 + 0.7*cl((S.right.x - VOL_X0)/(1 - VOL_X0 - 0.02));
+    S.tvVol = S.xLevel * S.open;
+    applyTheremin(S.midi, S.tvVol);
+  } else { S.tvVol = 0; applyTheremin(440, 0); }
+
+  /* 分区：只用一条极淡的线示意，不做物理隔断 */
+  ctx.strokeStyle="rgba(26,26,26,.08)"; ctx.lineWidth=1*k;
+  ctx.beginPath(); ctx.moveTo(X(TV_X0),R.y); ctx.lineTo(X(TV_X0),R.y+R.h); ctx.stroke();
+  ctx.strokeRect(R.x,R.y,R.w,R.h);
+
+  /* 五组乐器：从左到右音高由低到高，画得也由大到小 —— 一排看过去就是音高轴。
+     大小差比形状差好认得多。 */
+  const colW = R.w*(TV_X0-0.02)/GROUPS.length;
+  const cyG  = Y(0.52), rMax = Math.min(colW*0.40, R.h*0.16);
+  GROUPS.forEach((g,f)=>{
+    const cx = R.x + colW*(f+0.5);
+    const lv = S.fing[g.fi];
+    let pz = 0; g.layers.forEach(L=>{ const i=LAYERS.indexOf(L); pulse[i]=Math.max(0,pulse[i]-0.075); pz=Math.max(pz,pulse[i]); });
+    const r = rMax*g.size;
+    const a  = Math.min(.95, 0.08 + lv*0.42 + pz*lv*0.45);
+    const sc = 1 + pz*lv*0.08;
+    ctx.save(); ctx.translate(cx,cyG); ctx.scale(sc,sc); ctx.translate(-cx,-cyG);
+    ctx.strokeStyle=`rgba(26,26,26,${a})`;
+    ctx.lineWidth=1.3*k; ctx.lineJoin=ctx.lineCap="round";
+    ctx.stroke(inst(g.layers[0], cx, cyG, r));
+    ctx.restore();
+    /* 名字放在乐器下方，手挡住时至少还有大小可辨 */
+    ctx.textAlign="center"; ctx.textBaseline="top";
+    ctx.font=`${11*k}px ui-monospace,Menlo,monospace`;
+    ctx.fillStyle=`rgba(26,26,26,${0.16+lv*0.34})`;
+    ctx.fillText(g.name, cx, cyG + rMax + 8*k);
+    ctx.fillStyle="rgba(26,26,26,.22)";
+    ctx.font=`${10*k}px ui-monospace,Menlo,monospace`;
+    ctx.fillText(g.finger, cx, cyG + rMax + 26*k);
+    /* 音量：乐器下方一小段横条 */
+    const bw = colW*0.42, by = cyG + rMax + 44*k;
+    ctx.strokeStyle="rgba(26,26,26,.10)"; ctx.lineWidth=2*k; ctx.lineCap="butt";
+    ctx.beginPath(); ctx.moveTo(cx-bw/2,by); ctx.lineTo(cx+bw/2,by); ctx.stroke();
+    ctx.strokeStyle=`rgba(26,26,26,${0.2+lv*0.35})`;
+    ctx.beginPath(); ctx.moveTo(cx-bw/2,by); ctx.lineTo(cx-bw/2+bw*lv,by); ctx.stroke();
+    ctx.lineCap="round";
+  });
+
+  /* ---- 音高刻度：固定背景，只占右区，不跟着手动 ---- */
+  const tvX0 = X(TV_X0), tvX1 = R.x + R.w;
+  ctx.textBaseline="middle"; ctx.textAlign="right";
+  for(let m=0; m<=SEMIS; m++){
+    const yy = Y(LO + FIELD*(1 - m/SEMIS));
+    const nat = [0,2,4,5,7,9,11,12].includes(m);
+    ctx.strokeStyle = m%12===0 ? "rgba(26,26,26,.32)" : (nat?"rgba(26,26,26,.16)":"rgba(26,26,26,.06)");
+    ctx.lineWidth = 1*k;
+    const inset = nat ? 0 : (tvX1-tvX0)*0.28;
+    ctx.beginPath(); ctx.moveTo(tvX0+inset, yy); ctx.lineTo(tvX1, yy); ctx.stroke();
+    if(nat){
+      ctx.fillStyle="rgba(26,26,26,.26)";
+      ctx.font=`${11*k}px ui-monospace,Menlo,monospace`;
+      ctx.fillText(NAMES[(MIDI_LO+m)%12], tvX0-8*k, yy);
+    }
+  }
+
+  /* 两条线：细虚线＝手指到的音，实线＝实际在响的音。
+     它们之间的距离就是滑音 —— 滑块拖大，实线会明显落在虚线后面。 */
+  if(S.right){
+    const yOf = m => Y(LO + FIELD*(1 - (m-MIDI_LO)/SEMIS));
+    const yT = yOf(S.midi), yS = yOf(S.soundMidi);
+    const live = S.tvVol>0.02;
+
+    ctx.setLineDash([3*k,4*k]); ctx.lineWidth=1*k;
+    ctx.strokeStyle="rgba(26,26,26,.22)";
+    ctx.beginPath(); ctx.moveTo(tvX0,yT); ctx.lineTo(tvX1,yT); ctx.stroke();
+    ctx.setLineDash([]);
+
+    if(Math.abs(yS-yT) > 1.5*k){      // 有明显落后时，把这段距离画出来
+      ctx.strokeStyle="rgba(26,26,26,.14)"; ctx.lineWidth=5*k; ctx.lineCap="butt";
+      ctx.beginPath(); ctx.moveTo(tvX0+(tvX1-tvX0)*0.5, yT); ctx.lineTo(tvX0+(tvX1-tvX0)*0.5, yS); ctx.stroke();
+      ctx.lineCap="round";
+    }
+    ctx.strokeStyle = live?"rgba(26,26,26,.62)":"rgba(26,26,26,.16)";
+    ctx.lineWidth=(live?2:1)*k;
+    ctx.beginPath(); ctx.moveTo(tvX0,yS); ctx.lineTo(tvX1,yS); ctx.stroke();
+  }
+
+  /* 手 —— 上一版整段替换音高刻度时把这两行删掉了，所以屏幕上看不到手 */
+  if(S.left)  drawHand(S.left.lm,  X, Y, .34, R);
+  if(S.right) drawHand(S.right.lm, X, Y, S.tvVol>0.02 ? .46 : .24, R);
+
+  /* 音量轴：右区底部的横标尺，越往外越大 */
+  {
+    const bx0=X(VOL_X0), bx1=X(0.98), by=R.y+R.h-18*k;
+    ctx.lineCap="round"; ctx.lineWidth=2*k;
+    ctx.strokeStyle="rgba(26,26,26,.10)";
+    ctx.beginPath(); ctx.moveTo(bx0,by); ctx.lineTo(bx1,by); ctx.stroke();
+    if(S.right){
+      ctx.strokeStyle="rgba(26,26,26,.38)";
+      ctx.beginPath(); ctx.moveTo(bx0,by); ctx.lineTo(bx0+(bx1-bx0)*S.xLevel,by); ctx.stroke();
+      ctx.lineWidth=3*k; ctx.strokeStyle="rgba(26,26,26,.7)";
+      const mx=bx0+(bx1-bx0)*S.xLevel;
+      ctx.beginPath(); ctx.moveTo(mx,by-5*k); ctx.lineTo(mx,by+5*k); ctx.stroke();
+    }
+    ctx.textBaseline="top"; ctx.font=`${10*k}px ui-monospace,Menlo,monospace`;
+    ctx.fillStyle="rgba(26,26,26,.24)";
+    ctx.textAlign="left";  ctx.fillText("弱", bx0, by+8*k);
+    ctx.textAlign="right"; ctx.fillText("强", bx1, by+8*k);
+  }
+
+  /* 特雷门琴手旁边的音量弧：握拳收到最小，张开走满。静音时写「静音」两个字。 */
+  if(S.right){
+    const hx=X(S.right.x), hy=Y(S.right.y), rr=Math.min(R.w,R.h)*0.06;
+    ctx.lineCap="round"; ctx.lineWidth=2.5*k;
+    ctx.strokeStyle="rgba(26,26,26,.10)";
+    ctx.beginPath(); ctx.arc(hx,hy,rr,Math.PI*0.7,Math.PI*2.3); ctx.stroke();
+    ctx.strokeStyle = S.tvVol>0.02 ? "rgba(26,26,26,.55)" : "rgba(138,58,42,.5)";
+    ctx.beginPath();
+    ctx.arc(hx,hy,rr,Math.PI*0.7,Math.PI*0.7+Math.PI*1.6*Math.max(S.tvVol,0.02)); ctx.stroke();
+    if(S.tvVol<=0.02){
+      ctx.textAlign="center"; ctx.textBaseline="middle";
+      ctx.font=`${11*k}px ui-monospace,Menlo,monospace`;
+      ctx.fillStyle="rgba(138,58,42,.6)";
+      ctx.fillText("静音", hx, hy+rr+13*k);
+    }
+  }
+
+  /* 声音没开 = 整页一点声音都不会有。这件事必须画在正中间，不能藏在角落。 */
+  if(!AC || AC.state !== "running"){
+    const now2 = performance.now();
+    if(AC && now2 - (S.lastResume||0) > 1000){ S.lastResume = now2; AC.resume().catch(()=>{}); }
+    ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillStyle="rgba(138,58,42,.8)";
+    ctx.font=`${20*k}px -apple-system,ui-sans-serif,sans-serif`;
+    ctx.fillText("点一下页面，开启声音", R.x+R.w/2, R.y+R.h*0.62);
+    ctx.font=`${12*k}px -apple-system,ui-sans-serif,sans-serif`;
+    ctx.fillStyle="rgba(26,26,26,.4)";
+    ctx.fillText("浏览器规定声音必须由一次点击开启，只需一次", R.x+R.w/2, R.y+R.h*0.62+26*k);
+  }
+
+  /* 状态常驻：识别有没有起来，一眼看见，不用按 D */
+  ctx.textAlign="left"; ctx.textBaseline="bottom";
+  ctx.font=`${10*k}px ui-monospace,Menlo,monospace`;
+  ctx.fillStyle = (S.lib==="—"||S.lib==="载入中") ? "rgba(138,58,42,.75)" : "rgba(26,26,26,.3)";
+  ctx.fillText((S.lib==="—" ? "识别未启动" : S.lib==="载入中" ? "正在载入识别模型，首次约十几秒，之后浏览器会缓存" : `识别 ${S.lib} · 手 ${S.nHands}`) + (S.libErr?"  ·  "+S.libErr:""), R.x, R.y+R.h+16*k);
+
+  /* 拍点：整幅画的边框随四分音符呼吸一下，给特雷门琴一个时间参照 */
+  S.beat = Math.max(0, S.beat - 0.10);
+  if(S.beat > 0){
+    ctx.strokeStyle = `rgba(26,26,26,${0.05 + S.beat*0.18})`;
+    ctx.lineWidth = 1.5*k;
+    ctx.strokeRect(R.x-5*k, R.y-5*k, R.w+10*k, R.h+10*k);
+  }
+
+  /* 音名 */
+  const r2=Math.round(S.soundMidi);
+  ctx.textAlign="center"; ctx.textBaseline="alphabetic";
+  ctx.fillStyle=`rgba(26,26,26,${S.tvVol>0.02?.65:.14})`;
+  ctx.font=`${64*k}px ui-monospace,Menlo,monospace`;
+  ctx.fillText(S.right? NAMES[((r2%12)+12)%12]+(Math.floor(r2/12)-1) : "—", R.x+R.w/2, R.y+R.h*0.17);
+
+  S.drawMs=S.drawMs*0.9+(performance.now()-t0)*0.1;
+  if($("dbg").style.display!=="none"){
+    $("dbg").textContent =
+      `库 ${S.lib}  ${S.fps.toFixed(1)}fps  识别 ${S.infer.toFixed(1)}ms  绘制 ${S.drawMs.toFixed(1)}ms\n`+
+      `手 ${S.nHands}\n`+
+      `特雷门手 横向 ${S.xLevel.toFixed(2)} × 张开 ${S.open.toFixed(2)} = 音量 ${S.tvVol.toFixed(2)}\n`+
+      `左手五指 ${S.fing.map(v=>v.toFixed(2)).join(" ")}\n`+
+      `声部音量 ${level.map(v=>v.toFixed(1)).join(" ")}\n\n`+
+      `键：A 全开 · H 收栏`;
+  }
+  requestAnimationFrame(draw);
+
+/* file:// 下 getUserMedia 一定失败，先说清楚，别让人以为是手势功能坏了 */
+if(location.protocol === "file:"){
+  $("block").hidden = false;
+  $("x").addEventListener("click", ()=>{ $("block").hidden = true; });
+}
+}
+
+/* ── 控件 ───────────────────────────────── */
+const gs=$("glide"), bs=$("bpm"), ss=$("snap"), ts=$("tone"), cams=$("cam");
+ts.addEventListener("change", ()=>{ S.tone=+ts.value; applyTone(); });
+cams.addEventListener("change", ()=>{ cams.checked ? startCam().catch(e=>fatal("摄像头打不开："+e.message)) : stopCam(); });
+ss.addEventListener("input",()=>{ S.snap=+ss.value/100; $("snapval").textContent=ss.value+"%"; });
+function setGlide(ms){ S.glide=ms/1000; gs.value=ms; $("glideval").textContent=ms+" ms"; }
+gs.addEventListener("input",()=>setGlide(+gs.value));
+bs.addEventListener("input",()=>{ S.bpm=+bs.value; $("bpmval").textContent=S.bpm+" BPM"; });
+addEventListener("keydown", e=>{
+  audio();
+  switch(e.code){
+    case "KeyA": LAYERS.forEach((_,i)=>level[i]=1); break;
+    case "BracketLeft":  setGlide(Math.max(0,+gs.value-25)); break;
+    case "BracketRight": setGlide(Math.min(400,+gs.value+25)); break;
+    case "KeyD": $("dbg").style.display = $("dbg").style.display==="none"?"block":"none"; break;
+    case "KeyH": fold(); break;
+    case "KeyC": cams.checked=!cams.checked; cams.dispatchEvent(new Event("change")); break;
+  }
+});
+function fold(){ document.body.classList.toggle("folded");
+  $("tab").textContent = document.body.classList.contains("folded")?"›":"‹"; }
+$("tab").addEventListener("click", fold);
+for(const ev of ["pointerdown","mousedown","touchstart","click","keydown"])
+  addEventListener(ev, ()=>{ audio(); $("hint").classList.add("gone"); }, {passive:true});
+
+/* 先把画面转起来：摄像头和模型即使失败，界面也必须是可见的。
+   之前 draw 挂在 boot 成功之后，任何一步失败整页就是白的 —— 不能这样。 */
+requestAnimationFrame(draw);
+
+/* file:// 下 getUserMedia 一定失败，先说清楚，别让人以为是手势功能坏了 */
+if(location.protocol === "file:"){
+  $("block").hidden = false;
+  $("x").addEventListener("click", ()=>{ $("block").hidden = true; });
+}
+
+/* 错误铺满整屏，而不是躲在侧栏一行淡字里 */
+function fatal(msg){
+  const g=$("hint");
+  if(g && g.parentNode){ g.innerHTML=""; }
+  const box=document.createElement("div");
+  box.style.cssText="position:fixed;left:0;right:0;bottom:0;z-index:20;padding:16px 20px;"+
+    "background:#f4f2ee;border-top:1px solid #cfcbc3;color:#8a3a2a;white-space:pre-wrap;"+
+    "font:11px/1.7 ui-monospace,Menlo,monospace;max-height:45vh;overflow:auto";
+  box.textContent = msg;
+  document.body.appendChild(box);
+  $("msg").textContent = msg;
+}
+boot().catch(err=>fatal("启动失败：\n"+(err&&err.message||err)+
+  "\n\n界面仍然可用，只是没有手部识别。"));
+
+</script>
+</body>
+</html>

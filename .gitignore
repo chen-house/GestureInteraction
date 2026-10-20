@@ -1,0 +1,13 @@
+# 令牌和发布配置：绝对不进仓库
+.github-publish/
+
+# macOS
+.DS_Store
+._*
+
+# 识别模型，7.8MB，可以随时重新下
+lib/hand_landmarker.task
+
+# 本地服务器留下的东西
+__pycache__/
+*.pyc

@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>特雷门琴</title>
+<style>
+  :root{ --ink:#1a1a1a; --paper:#f4f2ee; --line:#cfcbc3; }
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; }
+  body{ margin:0; background:var(--paper); color:var(--ink); overflow:hidden;
+        font:12px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace; }
+  #tv-cv{ display:block; position:fixed; inset:0; width:100vw; height:100vh; }
+
+  #tv-side{ position:fixed; top:0; right:0; width:230px; height:100%;
+         padding:22px 20px; background:rgba(244,242,238,.9);
+         border-left:1px solid var(--line); backdrop-filter:blur(6px);
+         display:flex; flex-direction:column; gap:16px; overflow:auto;
+         transition:transform .22s ease; opacity:.6; }
+  #tv-side:hover{ opacity:1; }
+  body.folded #tv-side{ transform:translateX(230px); }
+  #tv-tab{ position:fixed; top:22px; right:230px; z-index:2; width:22px; height:26px;
+        border:1px solid var(--line); border-right:none; border-radius:3px 0 0 3px;
+        background:rgba(244,242,238,.9); cursor:pointer; opacity:.45;
+        display:flex; align-items:center; justify-content:center;
+        transition:right .22s ease; }
+  #tv-tab:hover{ opacity:1; }
+  body.folded #tv-tab{ right:0; }
+
+  h2{ font-size:11px; font-weight:400; letter-spacing:.12em; opacity:.4; margin:0; }
+  .sec{ border-top:1px solid var(--line); padding-top:13px; }
+  .lab{ display:flex; justify-content:space-between; align-items:baseline; opacity:.5; }
+  input[type=range]{ -webkit-appearance:none; appearance:none; width:100%; height:18px;
+                     background:none; margin:2px 0 0; cursor:pointer; }
+  input[type=range]::-webkit-slider-runnable-track{ height:1px; background:var(--line); }
+  input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; width:9px; height:9px;
+        border-radius:50%; background:var(--ink); margin-top:-4px; }
+  input[type=range]::-moz-range-track{ height:1px; background:var(--line); }
+  input[type=range]::-moz-range-thumb{ width:9px; height:9px; border:none;
+        border-radius:50%; background:var(--ink); }
+  .note{ font-size:10.5px; opacity:.5; line-height:1.95; }
+  kbd{ font:inherit; border:1px solid var(--line); border-radius:2px; padding:0 3px; }
+  #tv-dbg{ font-size:10px; opacity:.5; white-space:pre-wrap; line-height:1.7; display:none; }
+  #tv-report{ font-size:10px; white-space:pre-wrap; line-height:1.7; display:none; }
+  #tv-msg{ font-size:10.5px; color:#8a3a2a; white-space:pre-wrap; line-height:1.6; }
+
+  #tv-gate{ position:fixed; inset:0; background:var(--paper); z-index:9; cursor:pointer;
+         display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; }
+  #tv-gate b{ font-weight:400; font-size:15px; letter-spacing:.1em; }
+  #tv-gate span{ opacity:.4; }
+</style>
+</head>
+<body>
+
+<canvas id="tv-cv"></canvas>
+<div id="tv-tab">‹</div>
+
+<div id="tv-side">
+  <h2>特雷门琴</h2>
+
+  <div>
+    <div class="lab"><span>滑音</span><span id="tv-glideval">30 ms</span></div>
+    <input id="tv-glide" type="range" min="0" max="400" step="10" value="30">
+  </div>
+
+  <div class="sec note">
+    右手高度 → 音高<br>
+    左手高度 → 音量，抬高即大声<br><br>
+    <b>单手操作默认最大音量</b>
+  </div>
+
+  <div id="tv-dbg" class="sec"></div>
+  <div id="tv-report" class="sec"></div>
+  <div id="tv-msg"></div>
+</div>
+
+<div id="tv-gate"><b>点击开始</b><span>浏览器要求先有一次点击才能出声</span></div>
+
+<script type="module">
+/* 库版本按顺序试：新版失败就退回成熟的 0.10 线 */
+const LIBS = [
+  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1",
+  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35"
+];
+const MODELS = [
+  "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+  "https://storage.googleapis.com/mediapipe-assets/hand_landmarker.task"
+];
+
+const FIELD = 0.60, LO = (1-FIELD)/2, HI = LO+FIELD;
+const MIDI_LO = 60, SEMIS = 12;
+const CENTS_PER_UNIT = (SEMIS*100)/FIELD;
+const PALM = [0,5,9,13,17], TIP = 8;
+const NAMES = ["C","C♯","D","D♯","E","F","F♯","G","G♯","A","A♯","B"];
+const NATURAL = [0,2,4,5,7,9,11,12];
+const PALM_POLY = [0,1,5,9,13,17];
+const CHAINS = [[0,1,2,3,4],[0,5,6,7,8],[0,9,10,11,12],[0,13,14,15,16],[0,17,18,19,20]];
+
+const cv = document.getElementById("tv-cv"), ctx = cv.getContext("2d");
+const $ = id => document.getElementById("tv-" + id);
+
+const S = { axis:"y", muted:false, glide:0.030, volSpan:0.25,
+            pitch:null, vol:null, lastVol:null, twoHandT:-1e9,
+            nHands:0, inField:false, volume:0,
+            fps:0, infer:0, drawMs:0, frameMs:0, lib:"—" };
+
+/* ── 声音 ───────────────────────────────── */
+let AC=null, osc=null, vca=null;
+function audio(){
+  if(!AC){
+    AC = new (window.AudioContext||window.webkitAudioContext)({latencyHint:"interactive"});
+    osc = AC.createOscillator(); osc.type="sine";
+    vca = AC.createGain(); vca.gain.value = 0;
+    osc.connect(vca).connect(AC.destination);
+    osc.start();
+  }
+  if(AC.state !== "running") AC.resume();
+}
+function applyAudio(midi, vol){
+  if(!AC || AC.state !== "running") return;
+  osc.frequency.setTargetAtTime(440*Math.pow(2,(midi-69)/12), AC.currentTime, Math.max(0.0005,S.glide));
+  vca.gain.setTargetAtTime(S.muted ? 0 : vol*0.22, AC.currentTime, 0.030);
+}
+
+/* ── 画布 ───────────────────────────────── */
+let DPR=1;
+function resize(){
+  DPR = Math.min(2, devicePixelRatio||1);
+  cv.width  = Math.round(innerWidth *DPR);
+  cv.height = Math.round(innerHeight*DPR);
+}
+addEventListener("resize", resize); resize();
+
+/* 舞台 = 摄像头视野，保持比例不拉伸（拉伸会让横竖手感不一致） */
+function stage(){
+  const vw = (video && video.videoWidth)||640, vh = (video && video.videoHeight)||480;
+  const pad = (document.body.classList.contains("folded") ? 20 : 240) * DPR;
+  const aw = cv.width - pad, ah = cv.height - 48*DPR;
+  const s = Math.min(aw/vw, ah/vh), w = vw*s, h = vh*s;
+  return { x:(aw-w)/2, y:(cv.height-h)/2, w, h };
+}
+
+/* ── 识别 ───────────────────────────────── */
+let landmarker=null, video=null, lastTs=-1;
+
+async function boot(){
+  const fails = [];
+  for(const lib of LIBS){
+    let FR, HL, fs;
+    try{
+      ({FilesetResolver:FR, HandLandmarker:HL} = await import(lib + "/vision_bundle.mjs"));
+      fs = await FR.forVisionTasks(lib + "/wasm");
+    }catch(e){ fails.push(lib.split("@").pop() + " 库/wasm → " + e.message); continue; }
+    for(const url of MODELS){
+      try{
+        landmarker = await HL.createFromOptions(fs, {
+          baseOptions:{ modelAssetPath:url, delegate:"GPU" },
+          runningMode:"VIDEO", numHands:2,
+          minHandDetectionConfidence:0.5, minHandPresenceConfidence:0.5, minTrackingConfidence:0.5
+        });
+        S.lib = lib.split("@").pop();
+        break;
+      }catch(e){ fails.push(lib.split("@").pop() + " + " + url.split("/").pop() + " → " + e.message); }
+    }
+    if(landmarker) break;
+  }
+  if(!landmarker) throw new Error("模型加载全部失败：\n" + fails.join("\n"));
+
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video:{ width:{ideal:640}, height:{ideal:480}, frameRate:{ideal:60}, facingMode:"user" }, audio:false
+  });
+  video = document.createElement("video");
+  video.srcObject = stream; video.playsInline = true; video.muted = true;
+  await video.play();
+  pump();
+  requestAnimationFrame(draw);
+}
+
+let fC=0, fT=performance.now();
+function pump(){
+  const step = () => {
+    if(video.readyState>=2){
+      const ts = Math.max(lastTs+1, Math.round(performance.now())); lastTs = ts;
+      const t0 = performance.now();
+      let res=null;
+      try{ res = landmarker.detectForVideo(video, ts); }
+      catch(e){ $("msg").textContent = "识别出错：" + e.message; }
+      S.infer = S.infer*0.9 + (performance.now()-t0)*0.1;
+      read(res);
+      fC++;
+      const dt = performance.now()-fT;
+      if(dt>500){ S.fps = fC*1000/dt; fC=0; fT=performance.now(); }
+    }
+    if(video.requestVideoFrameCallback) video.requestVideoFrameCallback(step);
+    else requestAnimationFrame(step);
+  };
+  step();
+}
+
+/* 镜像：存进来的 x 就是屏幕上看到的位置。x 大者 = 你的右手 = 音高手 */
+function read(res){
+  const all = (res && res.landmarks) || [];
+  S.nHands = all.length;
+  if(!all.length){ S.pitch = S.vol = null; return; }
+  const hands = all.map(lm => {
+    let px=0, py=0;
+    for(const i of PALM){ px += lm[i].x; py += lm[i].y; }
+    return { x:1-px/PALM.length, y:py/PALM.length, tx:1-lm[TIP].x, ty:lm[TIP].y, lm };
+  }).sort((a,b)=>a.x-b.x);
+
+  S.pitch = hands[hands.length-1];
+  /* 左手快速甩动做断句时会因运动模糊短暂丢失，600ms 闩防止音量跳满 */
+  if(hands.length>1){ S.vol = S.lastVol = hands[0]; S.twoHandT = performance.now(); }
+  else S.vol = (performance.now()-S.twoHandT < 600) ? S.lastVol : null;
+
+  if(sampling) sample.push([S.pitch.x, S.pitch.y, S.pitch.tx, S.pitch.ty]);
+}
+
+const cl = v => v<0?0:v>1?1:v;
+function fieldNorm(p){
+  const n = cl(((S.axis==="y"?p.y:p.x) - LO)/FIELD);
+  return S.axis==="y" ? 1-n : n;
+}
+
+/* 手形：线描。先用纸色把手的实心形状盖上去（挡住背后的刻度），
+   再用细墨线勾骨架。看起来是一只线描的手，不是一团墨块。 */
+const px_=[], py_=[];
+function drawHand(lm, X, Y, alpha){
+  for(let i=0;i<21;i++){ px_[i]=X(1-lm[i].x); py_[i]=Y(lm[i].y); }
+  const thick = Math.hypot(px_[0]-px_[9], py_[0]-py_[9]) * 0.30;
+  ctx.lineJoin = ctx.lineCap = "round";
+
+  const path = () => {
+    ctx.beginPath();
+    PALM_POLY.forEach((i,n) => n ? ctx.lineTo(px_[i],py_[i]) : ctx.moveTo(px_[i],py_[i]));
+    ctx.closePath();
+    for(const ch of CHAINS){
+      ctx.moveTo(px_[ch[0]],py_[ch[0]]);
+      for(let n=1;n<ch.length;n++) ctx.lineTo(px_[ch[n]],py_[ch[n]]);
+    }
+  };
+  path();
+  ctx.fillStyle = ctx.strokeStyle = "rgba(244,242,238,.92)";
+  ctx.lineWidth = thick; ctx.fill(); ctx.stroke();
+  ctx.strokeStyle = `rgba(26,26,26,${alpha})`;
+  ctx.lineWidth = Math.max(1, thick*0.075);
+  ctx.stroke();
+}
+
+/* ── 画面 ───────────────────────────────── */
+let lastFrameT = performance.now();
+function draw(){
+  const t0 = performance.now();
+  S.frameMs = S.frameMs*0.9 + (t0-lastFrameT)*0.1; lastFrameT = t0;
+  ctx.clearRect(0,0,cv.width,cv.height);
+  const R = stage(), vert = S.axis==="y", k = DPR;
+  const X = u => R.x + u*R.w, Y = u => R.y + u*R.h;
+
+  const near = S.pitch && (S.pitch.x<.07||S.pitch.x>.93||S.pitch.y<.07||S.pitch.y>.93);
+  ctx.strokeStyle = near ? "rgba(138,58,42,.45)" : "rgba(26,26,26,.10)";
+  ctx.lineWidth = 1*k;
+  ctx.strokeRect(R.x, R.y, R.w, R.h);
+
+  ctx.strokeStyle="rgba(26,26,26,.30)"; ctx.setLineDash([3*k,4*k]);
+  for(const u of [LO,HI]){
+    ctx.beginPath();
+    if(vert){ ctx.moveTo(R.x,Y(u)); ctx.lineTo(R.x+R.w,Y(u)); }
+    else    { ctx.moveTo(X(u),R.y); ctx.lineTo(X(u),R.y+R.h); }
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  ctx.font = `${11*k}px ui-monospace,Menlo,monospace`;
+  ctx.textBaseline = "middle";
+  for(let s=0; s<=SEMIS; s++){
+    const nat = NATURAL.includes(s);
+    const t = vert ? 1-s/SEMIS : s/SEMIS;
+    const u = LO + t*FIELD, len = s%12===0 ? 1 : (nat?.5:.22);
+    ctx.lineWidth = 1*k;
+    ctx.strokeStyle = s%12===0 ? "rgba(26,26,26,.45)" : (nat?"rgba(26,26,26,.20)":"rgba(26,26,26,.08)");
+    ctx.beginPath();
+    if(vert){ const w=R.w*len; ctx.moveTo(R.x+(R.w-w)/2,Y(u)); ctx.lineTo(R.x+(R.w+w)/2,Y(u)); }
+    else    { const h=R.h*len; ctx.moveTo(X(u),R.y+(R.h-h)/2); ctx.lineTo(X(u),R.y+(R.h+h)/2); }
+    ctx.stroke();
+    if(nat){
+      ctx.fillStyle = "rgba(26,26,26,.30)";
+      ctx.textAlign = vert ? "right" : "center";
+      const nm = NAMES[(MIDI_LO+s)%12];
+      if(vert) ctx.fillText(nm, R.x-9*k, Y(u));
+      else     ctx.fillText(nm, X(u), R.y+R.h+16*k);
+    }
+  }
+
+  ctx.strokeStyle="rgba(26,26,26,.26)"; ctx.lineWidth=1.5*k;
+  for(const u of [HI, HI-S.volSpan]){
+    ctx.beginPath(); ctx.moveTo(R.x+8*k,Y(u)); ctx.lineTo(R.x+26*k,Y(u)); ctx.stroke();
+  }
+
+  let name="—", hz="";
+  if(S.pitch){
+    const raw = vert ? S.pitch.y : S.pitch.x;
+    S.inField = raw>=LO && raw<=HI;
+    S.volume = S.vol ? cl((HI - S.vol.y)/S.volSpan) : (S.inField ? 1 : 0);
+    const midi = MIDI_LO + fieldNorm(S.pitch)*SEMIS;
+    applyAudio(midi, S.volume);
+
+    const live = S.volume>0.02 && !S.muted;
+    if(S.vol) drawHand(S.vol.lm, X, Y, .42);
+    drawHand(S.pitch.lm, X, Y, live ? .80 : .34);
+
+    const cx=X(S.pitch.x), cy=Y(S.pitch.y);
+    ctx.lineWidth=(live?1.6:1)*k;
+    ctx.strokeStyle = live ? "rgba(26,26,26,.62)" : "rgba(26,26,26,.16)";
+    ctx.beginPath();
+    if(vert){ ctx.moveTo(R.x,cy); ctx.lineTo(R.x+R.w,cy); } else { ctx.moveTo(cx,R.y); ctx.lineTo(cx,R.y+R.h); }
+    ctx.stroke();
+    ctx.fillStyle = "rgba(244,242,238,.95)";
+    ctx.beginPath(); ctx.arc(cx,cy,4.5*k,0,7); ctx.fill();
+
+    const r=Math.round(midi);
+    name = NAMES[((r%12)+12)%12] + (Math.floor(r/12)-1);
+    hz = (440*Math.pow(2,(midi-69)/12)).toFixed(1)+" Hz";
+  } else {
+    S.inField=false; S.volume=0; applyAudio(440,0);
+  }
+
+  const liveNow = S.volume>0.02 && !S.muted;
+  ctx.textAlign="center"; ctx.textBaseline="alphabetic";
+  ctx.fillStyle = `rgba(26,26,26,${liveNow?.72:.16})`;
+  ctx.font = `${76*k}px ui-monospace,Menlo,monospace`;
+  ctx.fillText(name, R.x+R.w/2, R.y+R.h*0.22);
+  ctx.font = `${12*k}px ui-monospace,Menlo,monospace`;
+  ctx.fillStyle = "rgba(26,26,26,.34)";
+  ctx.fillText(hz + (S.pitch ? "   " + Math.round(S.volume*100) + "%" : ""),
+               R.x+R.w/2, R.y+R.h*0.22 + 22*k);
+  if(S.muted){
+    ctx.fillStyle="rgba(138,58,42,.7)";
+    ctx.fillText("已总静音（空格解除）", R.x+R.w/2, R.y+R.h-14*k);
+  }
+
+  S.drawMs = S.drawMs*0.9 + (performance.now()-t0)*0.1;
+  if($("dbg").style.display !== "none"){
+    $("dbg").textContent =
+      `库 ${S.lib}\n`+
+      `摄像头 ${S.fps.toFixed(1)}fps  识别 ${S.infer.toFixed(1)}ms\n`+
+      `绘制 ${S.drawMs.toFixed(1)}ms  整帧 ${S.frameMs.toFixed(1)}ms\n`+
+      `手 ${S.nHands}  ${S.pitch?`音高 ${S.pitch.x.toFixed(2)},${S.pitch.y.toFixed(2)} ${S.inField?"区内":"区外"}`:"无手"}\n`+
+      `${S.vol?`音量手 y${S.vol.y.toFixed(2)}\n`:""}`+
+      `音量 ${S.volume.toFixed(2)}  行程 ${Math.round(S.volSpan*100)}%\n`+
+      `声音 ${AC?AC.state:"未开"}  增益 ${vca?vca.gain.value.toFixed(3):"—"}\n\n`+
+      `键：, . 音量行程 · X Y 音高轴\n空格 静音 · M 抖动测量 · H 收栏`;
+  }
+  requestAnimationFrame(draw);
+}
+
+/* ── 静止抖动测量 ───────────────────────── */
+let sampling=false, sample=[];
+function measure(){
+  if(sampling) return;
+  sampling=true; sample=[];
+  $("report").style.display="block";
+  $("report").textContent="测量中 — 手不动 10 秒…";
+  setTimeout(()=>{
+    sampling=false;
+    if(sample.length<20){ $("report").textContent="样本太少，没抓到手。"; return; }
+    const col = i => sample.map(r=>r[i]);
+    const st = a => { const m=a.reduce((x,y)=>x+y,0)/a.length;
+      return { sd:Math.sqrt(a.reduce((x,y)=>x+(y-m)*(y-m),0)/a.length), pp:Math.max(...a)-Math.min(...a) }; };
+    const c = v => (v*CENTS_PER_UNIT).toFixed(1);
+    const row = (n,i)=>{ const s=st(col(i)); return `${n}  σ${c(s.sd)}  峰峰${c(s.pp)}`; };
+    $("report").textContent =
+      `${sample.length}帧/10秒 (${(sample.length/10).toFixed(1)}fps)\n单位：音分\n\n`+
+      row("掌心·横",0)+"\n"+row("掌心·纵",1)+"\n"+
+      row("指尖·横",2)+"\n"+row("指尖·纵",3)+"\n\n"+
+      `人耳约能听出 5–10 音分。\nσ 远超 10 → 音域要收窄或加平滑。`;
+  },10000);
+}
+
+/* ── 控件与按键 ─────────────────────────── */
+const slider = $("glide");
+function setGlide(ms){
+  S.glide = ms/1000;
+  slider.value = ms;
+  $("glideval").textContent = ms + " ms";
+}
+slider.addEventListener("input", () => setGlide(+slider.value));
+
+addEventListener("keydown", e => {
+  audio();
+  switch(e.code){
+    case "Space":        e.preventDefault(); S.muted=!S.muted; break;
+    case "KeyX":         S.axis="x"; break;
+    case "KeyY":         S.axis="y"; break;
+    case "BracketLeft":  setGlide(Math.max(0,  +slider.value-25)); break;
+    case "BracketRight": setGlide(Math.min(400,+slider.value+25)); break;
+    case "Comma":        S.volSpan=Math.max(0.08,S.volSpan-0.03); break;
+    case "Period":       S.volSpan=Math.min(0.60,S.volSpan+0.03); break;
+    case "KeyM":         measure(); break;
+    case "KeyD":         $("dbg").style.display = $("dbg").style.display==="none" ? "block" : "none"; break;
+    case "KeyH":         fold(); break;
+  }
+});
+function fold(){
+  document.body.classList.toggle("folded");
+  $("tab").textContent = document.body.classList.contains("folded") ? "›" : "‹";
+}
+$("tab").addEventListener("click", fold);
+addEventListener("pointerdown", audio);
+$("gate").addEventListener("click", () => { audio(); $("gate").remove(); });
+
+boot().catch(err => { $("msg").textContent = "启动失败：\n" + (err&&err.message||err); });
+</script>
+</body>
+</html>

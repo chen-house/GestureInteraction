@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>桑巴乐队</title>
+<style>
+  :root{ --ink:#1a1a1a; --paper:#f4f2ee; --line:#cfcbc3; }
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; }
+  body{ margin:0; background:var(--paper); color:var(--ink); overflow:hidden;
+        font:12px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace; }
+  #sb-cv{ display:block; position:fixed; inset:0; width:100vw; height:100vh; }
+
+  #sb-side{ position:fixed; top:0; right:0; width:230px; height:100%;
+    padding:22px 20px; background:rgba(244,242,238,.9);
+    border-left:1px solid var(--line); backdrop-filter:blur(6px);
+    display:flex; flex-direction:column; gap:16px; overflow:auto;
+    transition:transform .22s ease; opacity:.6; }
+  #sb-side:hover{ opacity:1; }
+  body.folded #sb-side{ transform:translateX(230px); }
+  #sb-tab{ position:fixed; top:22px; right:230px; z-index:2; width:22px; height:26px;
+    border:1px solid var(--line); border-right:none; border-radius:3px 0 0 3px;
+    background:rgba(244,242,238,.9); cursor:pointer; opacity:.45;
+    display:flex; align-items:center; justify-content:center; transition:right .22s ease; }
+  #sb-tab:hover{ opacity:1; }
+  body.folded #sb-tab{ right:0; }
+
+  h2{ font-size:11px; font-weight:400; letter-spacing:.12em; opacity:.4; margin:0; }
+  .lab{ display:flex; justify-content:space-between; align-items:baseline; opacity:.5; }
+  .sec{ border-top:1px solid var(--line); padding-top:13px; }
+  input[type=range]{ -webkit-appearance:none; appearance:none; width:100%; height:18px;
+    background:none; margin:2px 0 0; cursor:pointer; }
+  input[type=range]::-webkit-slider-runnable-track{ height:1px; background:var(--line); }
+  input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; width:9px; height:9px;
+    border-radius:50%; background:var(--ink); margin-top:-4px; }
+  input[type=range]::-moz-range-track{ height:1px; background:var(--line); }
+  input[type=range]::-moz-range-thumb{ width:9px; height:9px; border:none;
+    border-radius:50%; background:var(--ink); }
+  .note{ font-size:10.5px; opacity:.5; line-height:1.95; }
+  kbd{ font:inherit; border:1px solid var(--line); border-radius:2px; padding:0 3px; }
+  #sb-dbg{ font-size:10px; opacity:.5; white-space:pre-wrap; line-height:1.7; display:none; }
+  #sb-msg{ font-size:10.5px; color:#8a3a2a; white-space:pre-wrap; line-height:1.6; }
+
+  #sb-gate{ position:fixed; inset:0; background:var(--paper); z-index:9; cursor:pointer;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; }
+  #sb-gate b{ font-weight:400; font-size:15px; letter-spacing:.1em; }
+  #sb-gate span{ opacity:.4; }
+</style>
+</head>
+<body>
+
+<canvas id="sb-cv"></canvas>
+<div id="sb-tab">‹</div>
+
+<div id="sb-side">
+  <h2>桑巴乐队</h2>
+  <div>
+    <div class="lab"><span>速度</span><span id="sb-bpmval">100 BPM</span></div>
+    <input id="sb-bpm" type="range" min="60" max="160" step="1" value="100">
+  </div>
+  <div class="sec note">
+    右手左右移动 → 选乐器<br>
+    左手下压一下 → 开 / 关<br><br>
+    <b>单手只能选，不能开关</b>
+  </div>
+  <div id="sb-dbg" class="sec"></div>
+  <div id="sb-msg"></div>
+</div>
+
+<div id="sb-gate"><b>点击开始</b><span>浏览器要求先有一次点击才能出声</span></div>
+
+<script type="module">
+/* ── 以下为 sound-design-site/assets/js/samba.js 的纯合成部分，机械抽取后内联。
+     原文件未改动。内联是为了整页只有一个文件，不再有跨文件加载问题。 ── */
+/* samba-core.js — 从 sound-design-site/assets/js/samba.js 提取的纯合成部分。
+   只含发声函数与节奏图案，不含任何 DOM 与调度。原文件未改动。 */
+
+let _noiseBuf = null;
+function noiseBuf(ctx) {
+  if (_noiseBuf) return _noiseBuf;
+  const n = ctx.sampleRate * 2;
+  const b = ctx.createBuffer(1, n, ctx.sampleRate);
+  const d = b.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+  _noiseBuf = b;
+  return b;
+}
+function noiseSrc(ctx) {
+  const s = ctx.createBufferSource();
+  s.buffer = noiseBuf(ctx);
+  s.loop = true;
+  return s;
+}
+
+/* ---------- 基础发声块（与 drums.js 同源） ---------- */
+
+// 膜鼓音：正弦基频带音高包络
+function membrane(ctx, t, out, { f0, f1, dec, gain = 1, type = 'sine' }) {
+  const o = ctx.createOscillator();
+  o.type = type;
+  o.frequency.setValueAtTime(f0, t);
+  o.frequency.exponentialRampToValueAtTime(Math.max(f1, 0.0001), t + dec * 0.85);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(gain, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dec);
+  o.connect(g).connect(out);
+  o.start(t);
+  o.stop(t + dec + 0.05);
+}
+
+// 噪声击：滤波后短噪声（敲击、响弦、沙锤、刮擦）
+function noiseHit(ctx, t, out, { type = 'highpass', freq = 4000, Q = 0.7, gain = 0.5, dec = 0.05, attack = 0.001 }) {
+  const n = noiseSrc(ctx);
+  const f = ctx.createBiquadFilter();
+  f.type = type;
+  f.frequency.value = freq;
+  f.Q.value = Q;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(gain, t + attack);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dec);
+  n.connect(f).connect(g).connect(out);
+  n.start(t);
+  n.stop(t + dec + 0.05);
+}
+
+// 钟铃音（agogô）：少数正弦泛音快速衰减
+function bell(ctx, t, out, { freq, dec = 0.4, gain = 0.16 }) {
+  const ratios = [1, 2.0, 2.99];
+  const rg = [1, 0.4, 0.18];
+  ratios.forEach((r, i) => {
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.value = freq * r;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(gain * rg[i], t + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dec * (1 - i * 0.18));
+    o.connect(g).connect(out);
+    o.start(t);
+    o.stop(t + dec + 0.05);
+  });
+}
+
+// cuíca 摩擦鼓「呜-呃」：锯齿音高滑动经带通 —— 合成近似
+function cuicaCry(ctx, t, out, { f0, f1, dec = 0.22, gain = 0.22 }) {
+  const o = ctx.createOscillator();
+  o.type = 'sawtooth';
+  o.frequency.setValueAtTime(f0, t);
+  o.frequency.linearRampToValueAtTime(f1, t + dec * 0.8);
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = 680;
+  bp.Q.value = 3.5;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(gain, t + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dec);
+  o.connect(bp).connect(g).connect(out);
+  o.start(t);
+  o.stop(t + dec + 0.05);
+}
+
+// reco-reco 刮器：一串极短颗粒噪声模拟「咔啦」刮擦 —— 合成近似
+function recoScrape(ctx, t, out) {
+  for (let i = 0; i < 6; i++) {
+    noiseHit(ctx, t + i * 0.013, out, { type: 'bandpass', freq: 3000, Q: 1.3, gain: 0.11, dec: 0.012 });
+  }
+}
+
+/* ---------- 各声部单击合成 ---------- */
+const HIT = {
+  // 低音：surdo 大鼓 —— 开音(o) / 闷音(m)
+  surdoOpen(ctx, t, out) {
+    membrane(ctx, t, out, { f0: 96, f1: 54, dec: 0.5, gain: 1 });
+    noiseHit(ctx, t, out, { type: 'highpass', freq: 1500, gain: 0.14, dec: 0.012 });
+  },
+  surdoMute(ctx, t, out) {
+    membrane(ctx, t, out, { f0: 90, f1: 64, dec: 0.13, gain: 0.55 });
+  },
+  // 中音：caixa 响弦鼓 —— 普通(c) / 重音(a)
+  caixa(ctx, t, out) {
+    membrane(ctx, t, out, { f0: 250, f1: 230, dec: 0.04, gain: 0.12, type: 'triangle' });
+    noiseHit(ctx, t, out, { type: 'highpass', freq: 2000, Q: 0.7, gain: 0.26, dec: 0.035 });
+  },
+  caixaAccent(ctx, t, out) {
+    membrane(ctx, t, out, { f0: 250, f1: 225, dec: 0.05, gain: 0.16, type: 'triangle' });
+    noiseHit(ctx, t, out, { type: 'highpass', freq: 1800, Q: 0.7, gain: 0.5, dec: 0.06 });
+  },
+  // 中音：repinique 领奏鼓 —— 尖锐穿透
+  repique(ctx, t, out) {
+    membrane(ctx, t, out, { f0: 420, f1: 300, dec: 0.10, gain: 0.5, type: 'triangle' });
+    noiseHit(ctx, t, out, { type: 'highpass', freq: 2600, gain: 0.35, dec: 0.05 });
+  },
+  // 高音：tamborim 手鼓 —— 极短「嗒」
+  tamborim(ctx, t, out) {
+    membrane(ctx, t, out, { f0: 470, f1: 430, dec: 0.04, gain: 0.32, type: 'triangle' });
+    noiseHit(ctx, t, out, { type: 'highpass', freq: 4500, gain: 0.3, dec: 0.03 });
+  },
+  // 高音：chocalho 摇铃 —— 沙锤「唰」
+  chocalho(ctx, t, out) {
+    noiseHit(ctx, t, out, { type: 'highpass', freq: 6500, Q: 0.6, gain: 0.2, dec: 0.045 });
+  },
+  // 高音：agogô 双音铃 —— 高(h) / 低(l)
+  agogoHi(ctx, t, out) { bell(ctx, t, out, { freq: 900, dec: 0.32, gain: 0.15 }); },
+  agogoLo(ctx, t, out) { bell(ctx, t, out, { freq: 680, dec: 0.38, gain: 0.16 }); },
+  // 高音：cuíca 摩擦鼓 —— 升(u) / 降(d)
+  cuicaUp(ctx, t, out)   { cuicaCry(ctx, t, out, { f0: 260, f1: 540, dec: 0.2 }); },
+  cuicaDown(ctx, t, out) { cuicaCry(ctx, t, out, { f0: 540, f1: 250, dec: 0.22 }); },
+  // 高音：reco-reco 刮器
+  reco(ctx, t, out) { recoScrape(ctx, t, out); },
+};
+
+const PATTERN = {
+  // surdo：锚在拍 2、拍 4 的重开音(o)，前面 16 分垫一记闷音(m) —— 桑巴的「in 2」心跳
+  surdo:     { 3: 'm', 4: 'o', 11: 'm', 12: 'o' },
+  // caixa：连续 16 分铺底，'a' 的位置(每拍最后一个 16 分)给重音
+  caixa:     { 0:'c',1:'c',2:'c',3:'a',4:'c',5:'c',6:'c',7:'a',8:'c',9:'c',10:'c',11:'a',12:'c',13:'c',14:'c',15:'a' },
+  // repinique：稀疏领奏 + 句尾小过门
+  repinique: { 0: 'x', 7: 'x', 14: 'x', 15: 'x' },
+  // tamborim：teleco-teco 切分，高频咬住反拍
+  tamborim:  { 0: 'x', 3: 'x', 4: 'x', 7: 'x', 8: 'x', 11: 'x', 14: 'x' },
+  // chocalho：整排 16 分摇，制造摇摆 wash
+  chocalho:  { 0:'x',1:'x',2:'x',3:'x',4:'x',5:'x',6:'x',7:'x',8:'x',9:'x',10:'x',11:'x',12:'x',13:'x',14:'x',15:'x' },
+  // agogô：高低铃交替的固定音型
+  agogo:     { 0: 'l', 2: 'h', 3: 'h', 6: 'l', 8: 'h', 10: 'h', 11: 'h', 14: 'l' },
+  // cuíca：即兴「呜呃」点缀在反拍
+  cuica:     { 4: 'u', 6: 'd', 12: 'u', 14: 'd' },
+  // reco-reco：刮擦垫在每个正拍之前（每拍最后一个 16 分）
+  reco:      { 3: 'x', 7: 'x', 11: 'x', 15: 'x' },
+};
+
+// 代码 → 发声函数
+const VOICE = {
+  surdo:     { o: 'surdoOpen', m: 'surdoMute' },
+  caixa:     { c: 'caixa', a: 'caixaAccent' },
+  repinique: { x: 'repique' },
+  tamborim:  { x: 'tamborim' },
+  chocalho:  { x: 'chocalho' },
+  agogo:     { h: 'agogoHi', l: 'agogoLo' },
+  cuica:     { u: 'cuicaUp', d: 'cuicaDown' },
+  reco:      { x: 'reco' },
+};
+
+const LAYERS = ['surdo', 'caixa', 'repinique', 'tamborim', 'chocalho', 'agogo', 'cuica', 'reco'];
+/* ── 合成部分结束 ── */
+
+
+const LIBS = [
+  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1",
+  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35"
+];
+const MODELS = [
+  "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+  "https://storage.googleapis.com/mediapipe-assets/hand_landmarker.task"
+];
+
+const CN = { surdo:"surdo 大鼓", caixa:"caixa 响弦", repinique:"repinique 领奏",
+             tamborim:"tamborim 手鼓", chocalho:"chocalho 摇铃", agogo:"agogô 双音铃",
+             cuica:"cuíca 摩擦鼓", reco:"reco-reco 刮器" };
+
+const PALM = [0,5,9,13,17];
+const PALM_POLY = [0,1,5,9,13,17];
+const CHAINS = [[0,1,2,3,4],[0,5,6,7,8],[0,9,10,11,12],[0,13,14,15,16],[0,17,18,19,20]];
+
+const cv = document.getElementById("sb-cv"), ctx = cv.getContext("2d");
+const $ = id => document.getElementById("sb-" + id);
+
+const muted = new Set();                    // 关掉的声部
+const pulse = LAYERS.map(()=>0);            // 命中脉冲，0..1 衰减
+const S = { sel:-1, pitch:null, vol:null, lastVol:null, twoHandT:-1e9, nHands:0,
+            armed:true, lastToggle:0, bpm:100, lib:"—", fps:0, infer:0, drawMs:0 };
+
+/* 左手下压穿过这条线就切换一次（相对画面高度） */
+const TRIG = 0.62, RELEASE = 0.50, COOLDOWN = 260;
+
+/* ── 声音与调度（前瞻式，节奏由 AudioContext 时钟保证）── */
+let AC=null, master=null, step=0, nextT=0, timer=null;
+function audio(){
+  if(!AC){
+    AC = new (window.AudioContext||window.webkitAudioContext)({latencyHint:"interactive"});
+    master = AC.createGain(); master.gain.value = 0.85; master.connect(AC.destination);
+  }
+  if(AC.state !== "running") AC.resume();
+  if(!timer){ nextT = AC.currentTime + 0.06; timer = setInterval(sched, 25); }
+}
+const stepDur = () => (60/S.bpm)/4;
+function sched(){
+  if(!AC) return;
+  while(nextT < AC.currentTime + 0.12){
+    const st = step, t = nextT;
+    LAYERS.forEach((L,i) => {
+      if(muted.has(L)) return;
+      const code = PATTERN[L][st]; if(!code) return;
+      const fn = VOICE[L][code]; if(!fn || !HIT[fn]) return;
+      HIT[fn](AC, t, master);
+      setTimeout(() => { pulse[i] = 1; }, Math.max(0,(t-AC.currentTime)*1000));
+    });
+    nextT += stepDur();
+    step = (step+1) % 16;
+  }
+}
+
+/* ── 画布 ───────────────────────────────── */
+let DPR=1;
+function resize(){
+  DPR = Math.min(2, devicePixelRatio||1);
+  cv.width = Math.round(innerWidth*DPR); cv.height = Math.round(innerHeight*DPR);
+}
+addEventListener("resize", resize); resize();
+function stage(){
+  const pad = (document.body.classList.contains("folded") ? 20 : 240) * DPR;
+  return { x:40*DPR, y:40*DPR, w:cv.width-pad-80*DPR, h:cv.height-80*DPR };
+}
+
+/* ── 识别 ───────────────────────────────── */
+let landmarker=null, video=null, lastTs=-1;
+async function boot(){
+  const fails = [];
+  for(const lib of LIBS){
+    let FR, HL, fs;
+    try{
+      ({FilesetResolver:FR, HandLandmarker:HL} = await import(lib + "/vision_bundle.mjs"));
+      fs = await FR.forVisionTasks(lib + "/wasm");
+    }catch(e){ fails.push(lib.split("@").pop()+" 库 → "+e.message); continue; }
+    for(const url of MODELS){
+      try{
+        landmarker = await HL.createFromOptions(fs, {
+          baseOptions:{ modelAssetPath:url, delegate:"GPU" },
+          runningMode:"VIDEO", numHands:2,
+          minHandDetectionConfidence:0.5, minHandPresenceConfidence:0.5, minTrackingConfidence:0.5
+        });
+        S.lib = lib.split("@").pop(); break;
+      }catch(e){ fails.push(lib.split("@").pop()+" + "+url.split("/").pop()+" → "+e.message); }
+    }
+    if(landmarker) break;
+  }
+  if(!landmarker) throw new Error("模型加载全部失败：\n"+fails.join("\n"));
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video:{ width:{ideal:640}, height:{ideal:480}, frameRate:{ideal:60}, facingMode:"user" }, audio:false });
+  video = document.createElement("video");
+  video.srcObject = stream; video.playsInline = true; video.muted = true;
+  await video.play();
+  pump(); requestAnimationFrame(draw);
+}
+let fC=0, fT=performance.now();
+function pump(){
+  const stepFn = () => {
+    if(video.readyState>=2){
+      const ts = Math.max(lastTs+1, Math.round(performance.now())); lastTs = ts;
+      const t0 = performance.now();
+      let res=null;
+      try{ res = landmarker.detectForVideo(video, ts); }catch(e){ $("msg").textContent = "识别出错："+e.message; }
+      S.infer = S.infer*0.9 + (performance.now()-t0)*0.1;
+      read(res);
+      fC++; const dt = performance.now()-fT;
+      if(dt>500){ S.fps = fC*1000/dt; fC=0; fT=performance.now(); }
+    }
+    if(video.requestVideoFrameCallback) video.requestVideoFrameCallback(stepFn);
+    else requestAnimationFrame(stepFn);
+  };
+  stepFn();
+}
+function read(res){
+  const all = (res && res.landmarks) || [];
+  S.nHands = all.length;
+  if(!all.length){ S.pitch = S.vol = null; return; }
+  const hands = all.map(lm => {
+    let px=0, py=0;
+    for(const i of PALM){ px += lm[i].x; py += lm[i].y; }
+    return { x:1-px/PALM.length, y:py/PALM.length, lm };
+  }).sort((a,b)=>a.x-b.x);
+  S.pitch = hands[hands.length-1];
+  if(hands.length>1){ S.vol = S.lastVol = hands[0]; S.twoHandT = performance.now(); }
+  else S.vol = (performance.now()-S.twoHandT < 600) ? S.lastVol : null;
+}
+
+/* 边沿检测：下压穿过 TRIG 触发一次，抬回 RELEASE 以上才重新武装 */
+function gesture(){
+  S.sel = S.pitch ? Math.min(LAYERS.length-1, Math.max(0, Math.floor(S.pitch.x*LAYERS.length))) : -1;
+  if(!S.vol || S.sel < 0){ return; }
+  const now = performance.now();
+  if(S.armed && S.vol.y > TRIG && now - S.lastToggle > COOLDOWN){
+    const L = LAYERS[S.sel];
+    muted.has(L) ? muted.delete(L) : muted.add(L);
+    S.armed = false; S.lastToggle = now;
+  }
+  if(!S.armed && S.vol.y < RELEASE) S.armed = true;
+}
+
+/* ── 线描乐器 ───────────────────────────── */
+function inst(name, cx, cy, r){
+  const p = new Path2D();
+  const E = (x,y,rx,ry) => p.ellipse(x,y,rx,ry,0,0,Math.PI*2);
+  const cyl = (w,h) => {                      // 圆柱：顶椭圆 + 两侧壁 + 底弧
+    const rx=r*w, ry=r*w*0.30, y0=cy-r*h/2, y1=cy+r*h/2;
+    p.moveTo(cx-rx,y0); p.ellipse(cx,y0,rx,ry,0,Math.PI,0,true);
+    p.moveTo(cx-rx,y0); p.lineTo(cx-rx,y1);
+    p.moveTo(cx+rx,y0); p.lineTo(cx+rx,y1);
+    p.moveTo(cx-rx,y1); p.ellipse(cx,y1,rx,ry,0,Math.PI,0,false);
+    p.moveTo(cx-rx,y0); p.ellipse(cx,y0,rx,ry,0,0,Math.PI,false);
+    return {rx,ry,y0,y1};
+  };
+  if(name==="surdo"){ const c=cyl(0.62,1.15);
+    p.moveTo(cx-c.rx,c.y0+r*0.1); p.lineTo(cx-c.rx-r*0.3,cy); p.lineTo(cx-c.rx,c.y1-r*0.1); }
+  else if(name==="caixa"){ const c=cyl(0.55,0.55);
+    for(let i=-2;i<=2;i++){ p.moveTo(cx-c.rx,c.y1+i*r*0.05); p.lineTo(cx+c.rx,c.y1+i*r*0.05); } }
+  else if(name==="repinique"){ cyl(0.40,0.85); }
+  else if(name==="tamborim"){ E(cx,cy-r*0.1,r*0.42,r*0.42); E(cx,cy-r*0.1,r*0.33,r*0.33);
+    p.moveTo(cx+r*0.3,cy+r*0.3); p.lineTo(cx+r*0.75,cy+r*0.75); }
+  else if(name==="chocalho"){ const w=r*0.42,h=r*0.5;
+    p.rect(cx-w,cy-h,w*2,h*1.6);
+    for(let i=-1;i<=1;i++){ p.moveTo(cx+i*w*0.66,cy-h); p.lineTo(cx+i*w*0.66,cy+h*0.6); }
+    p.moveTo(cx-w*0.3,cy+h*0.6); p.lineTo(cx-w*0.3,cy+h*1.1);
+    p.moveTo(cx+w*0.3,cy+h*0.6); p.lineTo(cx+w*0.3,cy+h*1.1); }
+  else if(name==="agogo"){ for(const s of [-1,1]){
+      const x=cx+s*r*0.34; p.moveTo(x-r*0.22,cy-r*0.42); p.lineTo(x+r*0.22,cy-r*0.42);
+      p.lineTo(x+r*0.10,cy+r*0.30); p.lineTo(x-r*0.10,cy+r*0.30); p.closePath(); }
+    p.moveTo(cx-r*0.34,cy+r*0.30); p.quadraticCurveTo(cx,cy+r*0.75,cx+r*0.34,cy+r*0.30); }
+  else if(name==="cuica"){ const c=cyl(0.50,0.75);
+    p.moveTo(cx,c.y0); p.lineTo(cx,cy-r*0.95); }
+  else { const c=cyl(0.52,0.62);                 // reco-reco
+    for(let i=-3;i<=3;i++){ p.moveTo(cx+i*c.rx*0.26,c.y0+c.ry); p.lineTo(cx+i*c.rx*0.26,c.y1-c.ry); }
+    p.moveTo(cx+c.rx*0.2,c.y0-r*0.3); p.lineTo(cx+c.rx*1.1,c.y1+r*0.1); }
+  return p;
+}
+
+function drawHand(lm, X, Y, alpha){
+  const px=[], py=[];
+  for(let i=0;i<21;i++){ px[i]=X(1-lm[i].x); py[i]=Y(lm[i].y); }
+  const thick = Math.hypot(px[0]-px[9], py[0]-py[9]) * 0.30;
+  ctx.lineJoin = ctx.lineCap = "round";
+  ctx.beginPath();
+  PALM_POLY.forEach((i,n)=> n?ctx.lineTo(px[i],py[i]):ctx.moveTo(px[i],py[i]));
+  ctx.closePath();
+  for(const ch of CHAINS){ ctx.moveTo(px[ch[0]],py[ch[0]]);
+    for(let n=1;n<ch.length;n++) ctx.lineTo(px[ch[n]],py[ch[n]]); }
+  ctx.fillStyle = ctx.strokeStyle = "rgba(244,242,238,.92)";
+  ctx.lineWidth = thick; ctx.fill(); ctx.stroke();
+  ctx.strokeStyle = `rgba(26,26,26,${alpha})`;
+  ctx.lineWidth = Math.max(1, thick*0.075); ctx.stroke();
+}
+
+/* ── 画面 ───────────────────────────────── */
+function draw(){
+  const t0 = performance.now();
+  ctx.clearRect(0,0,cv.width,cv.height);
+  const R = stage(), k = DPR;
+  const X = u => R.x + u*R.w, Y = u => R.y + u*R.h;
+  gesture();
+
+  const colW = R.w/LAYERS.length, r = Math.min(colW*0.34, R.h*0.13);
+  const cy = R.y + R.h*0.42;
+
+  LAYERS.forEach((L,i) => {
+    const cx = R.x + colW*(i+0.5);
+    const on = !muted.has(L), selected = i === S.sel;
+    pulse[i] = Math.max(0, pulse[i] - 0.075);
+
+    /* 选中 = 一圈光晕，不是边框 */
+    if(selected){
+      const g = ctx.createRadialGradient(cx,cy,r*0.6,cx,cy,r*2.6);
+      g.addColorStop(0,"rgba(26,26,26,.07)"); g.addColorStop(1,"rgba(26,26,26,0)");
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx,cy,r*2.6,0,7); ctx.fill();
+    }
+    /* 浓淡就是状态：关＝极淡，开＝墨色，命中＝更浓 */
+    const base = on ? 0.52 : 0.13;
+    const a = Math.min(0.95, base + (on ? pulse[i]*0.45 : 0) + (selected ? 0.18 : 0));
+    const s = 1 + (on ? pulse[i]*0.06 : 0);
+
+    ctx.save(); ctx.translate(cx,cy); ctx.scale(s,s); ctx.translate(-cx,-cy);
+    ctx.strokeStyle = `rgba(26,26,26,${a})`;
+    ctx.lineWidth = (selected?1.6:1.2)*k; ctx.lineJoin = ctx.lineCap = "round";
+    ctx.stroke(inst(L,cx,cy,r));
+    ctx.restore();
+
+    ctx.textAlign="center"; ctx.textBaseline="top";
+    ctx.font = `${11*k}px ui-monospace,Menlo,monospace`;
+    ctx.fillStyle = `rgba(26,26,26,${on?0.5:0.16})`;
+    ctx.fillText(CN[L], cx, cy + r*1.5);
+  });
+
+  /* 左手的触发线 */
+  if(S.vol){
+    ctx.setLineDash([3*k,5*k]); ctx.lineWidth = 1*k;
+    ctx.strokeStyle = S.armed ? "rgba(26,26,26,.18)" : "rgba(138,58,42,.35)";
+    ctx.beginPath(); ctx.moveTo(R.x,Y(TRIG)); ctx.lineTo(R.x+R.w,Y(TRIG)); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  if(S.vol) drawHand(S.vol.lm, X, Y, .40);
+  if(S.pitch) drawHand(S.pitch.lm, X, Y, .72);
+
+  S.drawMs = S.drawMs*0.9 + (performance.now()-t0)*0.1;
+  if($("dbg").style.display !== "none"){
+    $("dbg").textContent =
+      `库 ${S.lib}\n摄像头 ${S.fps.toFixed(1)}fps 识别 ${S.infer.toFixed(1)}ms\n`+
+      `绘制 ${S.drawMs.toFixed(1)}ms\n手 ${S.nHands}  选中 ${S.sel>=0?LAYERS[S.sel]:"—"}\n`+
+      `${S.vol?`左手 y${S.vol.y.toFixed(2)} ${S.armed?"待发":"已发"}`:"无左手"}\n`+
+      `关闭中 ${[...muted].join(",")||"无"}\n\n键：A 全开 · N 全关 · H 收栏`;
+  }
+  requestAnimationFrame(draw);
+}
+
+/* ── 控件 ───────────────────────────────── */
+const bpm = $("bpm");
+bpm.addEventListener("input", () => { S.bpm = +bpm.value; $("bpmval").textContent = S.bpm + " BPM"; });
+addEventListener("keydown", e => {
+  audio();
+  switch(e.code){
+    case "KeyA": muted.clear(); break;
+    case "KeyN": LAYERS.forEach(L=>muted.add(L)); break;
+    case "KeyD": $("dbg").style.display = $("dbg").style.display==="none" ? "block" : "none"; break;
+    case "KeyH": fold(); break;
+  }
+});
+function fold(){
+  document.body.classList.toggle("folded");
+  $("tab").textContent = document.body.classList.contains("folded") ? "›" : "‹";
+}
+$("tab").addEventListener("click", fold);
+addEventListener("pointerdown", audio);
+$("gate").addEventListener("click", () => { audio(); $("gate").remove(); });
+
+boot().catch(err => { $("msg").textContent = "启动失败：\n" + (err&&err.message||err); });
+</script>
+</body>
+</html>
