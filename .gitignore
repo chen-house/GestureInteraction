@@ -5,8 +5,8 @@
 .DS_Store
 ._*
 
-# 识别模型，7.8MB，可以随时重新下
-lib/hand_landmarker.task
+# 注意：lib/hand_landmarker.task（识别模型，7.8MB）故意不忽略。
+# 放到 lib/ 里就该进仓库 —— GitHub Pages 要靠它才能完全不联网。
 
 # 本地服务器留下的东西
 __pycache__/
