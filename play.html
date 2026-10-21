@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>手势乐器 v28</title>
+<title>手势乐器 v29</title>
 <style>
   :root{ --ink:#e4e0d8; --paper:#121315; --line:#32343a; --dim:#8a8882;
          --hot:#e89254; --bar:62px; }
@@ -113,7 +113,7 @@
 <div id="gi-tab">‹</div>
 
 <div id="gi-side">
-  <h2>手势乐器 <span style="opacity:.35;font-weight:400">v28</span></h2>
+  <h2>手势乐器 <span style="opacity:.35;font-weight:400">v29</span></h2>
   <div>
     <div class="lab"><span>滑音</span><span id="gi-glideval">30 ms</span></div>
     <input id="gi-glide" type="range" min="0" max="400" step="10" value="30">
@@ -1178,12 +1178,27 @@ function read(res){
    2) 等比画 —— 舞台不是 4:3，直接用 X()/Y() 会把手拉成怪形状。
       位置仍用 X()/Y()（这样四角都够得到），但形状用同一个缩放比画。
    3) 限尺寸 —— 手离镜头近时会占满全屏。掌长超过上限就整体缩回去。 */
-function drawHand(lm, X, Y, alpha, R, thumbMark, pinchMark){
+/* 右手要画在「映射之后」的高度上，而不是原始位置。
+   原来手画在原始位置、声音在映射之后的位置，画面上就同时存在两个相差十几像素
+   的东西，眼睛读成「线在撒谎」。实测：手心在 F 上方 0.60 个半音时，
+   实际发声是 F 上方 0.41 个半音 —— 函数没错，但那 0.19 个半音的差被画出来了。
+   这里没有摄像头画面做参照（整页一次 drawImage 都没有），所以把手挪到映射后的
+   位置不和任何东西冲突，而且手本身就成了游标，和虚线永远重合。
+   副作用正好是想要的：手靠近音阶线时视觉上会慢下来 —— 这就是 C/D 增益那条
+   伪触觉，不用另外做。
+   场外不挪：手低于/高于音域时音高是钳位的，这时候照实画，否则游标就开始撒谎
+   （规则二十三栽过一次）。 */
+function rightHandDrawY(){
+  if(!S.right) return null;
+  if(S.right.y < LO || S.right.y > LO + FIELD) return S.right.y;
+  return LO + FIELD*(1 - (S.midi - MIDI_LO)/SEMIS);
+}
+function drawHand(lm, X, Y, alpha, R, thumbMark, pinchMark, yAt){
   if(!lm) return;
   let cxN=0, cyN=0;
   for(const i of PALMPTS){ cxN+=lm[i].x; cyN+=lm[i].y; }
   cxN/=PALMPTS.length; cyN/=PALMPTS.length;
-  const cx = X(1-cxN), cy = Y(cyN);
+  const cx = X(1-cxN), cy = Y(yAt === undefined || yAt === null ? cyN : yAt);
 
   const span = Math.hypot(lm[9].x-lm[0].x, lm[9].y-lm[0].y) || 1e-6;
   const base = Math.min(R.w, R.h);
@@ -1856,7 +1871,7 @@ function draw(){
 
   /* 手 —— 上一版整段替换音高刻度时把这两行删掉了，所以屏幕上看不到手 */
   if(S.left)  drawHand(S.left.lm,  X, Y, .34, R, !S.fist);
-  if(S.right) drawHand(S.right.lm, X, Y, S.tvVol>0.02 ? .46 : .24, R, false, S.voice);
+  if(S.right) drawHand(S.right.lm, X, Y, S.tvVol>0.02 ? .46 : .24, R, false, S.voice, rightHandDrawY());
 
   /* ── 特雷门琴音量：右块的整条底边。往右变大，收到最左（贴中线）＝静。
        和左边那条对称：两条都从各自那一块的边缘起，不钉在手的行程上。 ── */
