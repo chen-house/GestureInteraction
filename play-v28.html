@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>手势乐器 v27</title>
+<title>手势乐器 v28</title>
 <style>
   :root{ --ink:#e4e0d8; --paper:#121315; --line:#32343a; --dim:#8a8882;
          --hot:#e89254; --bar:62px; }
@@ -113,7 +113,7 @@
 <div id="gi-tab">‹</div>
 
 <div id="gi-side">
-  <h2>手势乐器 <span style="opacity:.35;font-weight:400">v27</span></h2>
+  <h2>手势乐器 <span style="opacity:.35;font-weight:400">v28</span></h2>
   <div>
     <div class="lab"><span>滑音</span><span id="gi-glideval">30 ms</span></div>
     <input id="gi-glide" type="range" min="0" max="400" step="10" value="30">
@@ -596,6 +596,68 @@ const PINCH_ON = 0.55, PINCH_OFF = 0.72;
    收声多等一帧是为了一个噪声帧不要把长音切断；出声多等一帧只是让音头迟到。
    两个方向本来就不该用同一个数。 */
 const PINCH_FRAMES_ON = 1, PINCH_FRAMES_OFF = 2;
+
+/* ══════ 位置 → 音高：把吸附做进映射函数本身 ══════
+   以前是「起音那一下算一个固定偏移，把音头搬到线上」。音头是准了，但那个偏移
+   在整个发声期间一直挂着 —— 屏幕上的线和你听到的音最多能差 100 音分（整整一个
+   半音）。画面开始撒谎，而画面是你唯一的瞄准工具，越调越乱。
+
+   改成：音阶音附近的位置带被拉宽（走得慢），两个音之间被压窄（走得快）。
+   相邻两个音阶音在 n0、n1，t=(u-n0)/(n1-n0)，输出 = n0 + (n1-n0)*g(t)
+     g(t) = (1-s)*t + s*(6t⁵-15t⁴+10t³)
+   后一项是 smootherstep（两端一阶二阶导都为 0 的 S 形）。
+     s=0 → 完全线性，纯特雷门琴
+     s=1 → 音上斜率 0（抖动完全不变音），中间最陡 1.875（滑音永远不跳）
+   四条性质直接从公式来：连续、单调、音阶音是不动点、最大斜率有限。
+   因为音阶音是不动点，屏幕上那些线一个像素都不用动。
+
+   最要紧的一条：这个函数同时喂声音和画面游标，只算一次。
+   音画一致不是靠对齐两个结果，是靠它们本来就是同一个数。 */
+const smoother = t => t*t*t*(t*(t*6 - 15) + 10);
+/* 敲击类没有持续声部，揉不了音，所以拉满；持续类留 0.3 的斜率，
+   手上下 20px 给 ±13 音分 —— 揉音还在。s=1 会把揉音一起杀掉。 */
+const warpBase = () => isStruck() ? 1.0 : 0.7;
+function warp(m){
+  const s = cl(S.snap) * warpBase();
+  if(!(s > 0)) return m;
+  const oct = Math.floor((m - MIDI_LO)/12);
+  const pc  = m - MIDI_LO - oct*12;
+  const deg = scaleDeg().concat([12]);
+  let a = deg[0], b = deg[deg.length-1];
+  for(let i=0;i<deg.length-1;i++) if(pc >= deg[i] && pc <= deg[i+1]){ a=deg[i]; b=deg[i+1]; break; }
+  if(!(b > a)) return m;
+  const t = (pc - a)/(b - a);
+  return MIDI_LO + oct*12 + a + (b - a)*((1-s)*t + s*smoother(t));
+}
+
+/* ══════ 1€ filter ══════
+   固定时间常数的低通两头不讨好：常数小，手静止时抖动透传成音准漂移；
+   常数大，手快速移动时拖尾（「动了没反应」）。
+   1€ 的做法是让截止频率跟着手的速度走：慢时重滤波，快时轻滤波。
+   Source: Casiez, Roussel, Vogel — 1€ Filter, CHI 2012
+           https://cristal.univ-lille.fr/~casiez/1euro
+   注意：只在「新识别帧」上推进。draw() 一秒 60~120 次而 read() 只有 15~30 次，
+   在画面帧上跑滤波器，等于参数含义跟着显示器变（规则二十五）。 */
+const OE_MINCUT = 1.5, OE_BETA = 1.2, OE_DCUT = 1.0;
+function oneEuro(st, x, tms){
+  if(!st.t){ st.t = tms; st.x = x; st.dx = 0; return x; }
+  const dt = Math.max(1e-4, (tms - st.t)/1000); st.t = tms;
+  const al = c => { const r = 2*Math.PI*c*dt; return r/(r+1); };
+  const dx = (x - st.x)/dt;
+  st.dx += al(OE_DCUT)*(dx - st.dx);
+  st.x  += al(OE_MINCUT + OE_BETA*Math.abs(st.dx))*(x - st.x);
+  return st.x;
+}
+/* 一个半音在屏幕上占多少 CSS 像素 —— 把抖动换算成音分要用 */
+function pxPerSemi(){ const R = stage(); return (FIELD*R.h/DPR)/SEMIS; }
+/* 最近 2 秒内「滤波之前」的位置读数峰峰值。手举着别动，这个数就是你的抖动。 */
+function jitTxt(){
+  if(S.jit.length < 2) return "—";
+  let lo = 1e9, hi = -1e9;
+  for(const v of S.jit){ if(v<lo) lo=v; if(v>hi) hi=v; }
+  const semi = hi - lo;
+  return (semi*pxPerSemi()).toFixed(1) + "px / " + (semi*100).toFixed(0) + "音分";
+}
 /* 发音方式。捏合是对的做法（没有它就弹不出 3 3），但它和握拳一样要按手标定，
    而我现在还没有你的读数。万一在你手上认不出来，整把琴就哑了 ——
    所以留一条退路：切回「常开」就是 v19 以前的行为，手在就出声。
@@ -708,7 +770,7 @@ const S = { glide:0.030, bpm:100, tone:0, soundMidi:60, lastT:0,
             fps:0, hz:0, infer:0, drawMs:0,
             scale:"7", pinch:9, voice:false, voiceN:0, voiceFlash:0, lastStrike:null,
             gateMode:"pinch", outField:false,
-            voicePrev:false, snapOff:0,
+            voicePrev:false, pitchT:-1, rawM:null, oe:{t:0,x:0,dx:0}, jit:[], jitT:[],
             thumb:0, thumbS:null, tStep:-1, tT:0, bpmWant:100, bpmFlash:0 };
 
 /* ── 声音 ───────────────────────────────── */
@@ -1251,7 +1313,8 @@ function syncBar(){
       + "   握<" + S.grabAt.toFixed(2) + " 松>" + S.freeAt.toFixed(2)
       + "   拇指 " + S.thumb.toFixed(2) + (S.tStep>=0 ? " ("+TEMPOS[S.tStep]+")" : "")
       + "   捏合 " + (S.pinch>8 ? "—" : S.pinch.toFixed(2))
-      + " (捏<"+PINCH_ON+" 松>"+PINCH_OFF+")" 
+      + " (捏<"+PINCH_ON+" 松>"+PINCH_OFF+")"
+      + "   抖动 " + jitTxt() 
     : "—");
   const fc = $("s-fistcell"); if(fc) fc.classList.toggle("on", !!S.fist);
 }
@@ -1441,20 +1504,16 @@ function draw(){
   /* ---- 右手：特雷门琴 ---- */
   if(S.right){
     const n = cl((S.right.y - LO)/FIELD);
-    const rawM = MIDI_LO + (1-n)*SEMIS;
-    /* 吸附是用来「打中」音的，不是用来量化滑音的。
-       以前每一帧都吸，于是按住从 5 滑到 1' 听到的是 5→6→7→1' 四个台阶，
-       每一级都是一个清楚的错音。
-       改成：起音那一瞬间算一次偏移，捏住之后手移动多少音就移动多少 ——
-       音头落在线上，滑音是连续的。 */
-    const snapOf = m => {
-      if(!(S.snap > 0)) return m;
-      const pc = ((m - MIDI_LO) % 12 + 12) % 12;
-      const deg = scaleDeg();
-      let best = deg[0], bd = 99;
-      for(const d of deg.concat([12])){ const dd = Math.abs(pc-d); if(dd<bd){ bd=dd; best=d; } }
-      return m + ((m - pc + best) - m) * S.snap;
-    };
+    const rawRaw = MIDI_LO + (1-n)*SEMIS;
+    /* 滤波和抖动统计都只在新识别帧上走 */
+    if((nowMs - S.rT) < 120 && S.rT !== S.pitchT){
+      S.pitchT = S.rT;
+      S.rawM = oneEuro(S.oe, rawRaw, nowMs);
+      S.jit.push(rawRaw); S.jitT.push(nowMs);
+      while(S.jitT.length && nowMs - S.jitT[0] > 2000){ S.jit.shift(); S.jitT.shift(); }
+    }
+    if(S.rawM === null) S.rawM = rawRaw;
+    const rawM = S.rawM;
     /* y 音高，x 音量。右手自己就是一把完整的特雷门琴，不依赖左手。 */
     S.tvVol = cl((S.right.x - TVOL0)/(TVOL1 - TVOL0));
     /* 捏合判定必须排在算音高之前 —— 起音那一帧要用它来决定吸附偏移。 */
@@ -1472,12 +1531,9 @@ function draw(){
         S.voiceN = 0; S.voice = want; if(want) S.voiceFlash = 1; }
     }
     const attack = S.voice && !S.voicePrev;
-    if(attack)   S.snapOff = snapOf(rawM) - rawM;    // 音头落在线上
-    if(!S.voice) S.snapOff = 0;
-    /* 出声时：手移动多少音就移动多少（连续，带音头那一次偏移）。
-       静音时：显示吸附后的值 —— 这时候画面是用来瞄准的，该告诉你会落在哪条线上。
-       两者在起音那一瞬间相等，所以不会跳。 */
-    S.midi = S.voice ? rawM + S.snapOff : snapOf(rawM);
+    /* 出声和静音用的是同一个函数，所以画面和声音永远是同一个数。
+       静音期间振荡器的频率是冻住的（见 applyTheremin），所以「无声换把位」还在。 */
+    S.midi = warp(rawM);
     const now = performance.now();
     const dt  = S.lastT ? Math.min(0.1, (now-S.lastT)/1000) : 0.016;
     S.lastT = now;
@@ -1489,14 +1545,15 @@ function draw(){
        对敲击类「一直响」没有意义 —— 那条退路得换个样子：
        音高每跨过一条音阶线就敲一下。手一路滑过去就是一串音，不需要捏合。 */
     if(S.gateMode === "open" && isStruck()){
-      const noteNow = Math.round(snapOf(rawM));
+      const noteNow = Math.round(warp(rawM));
       if(S.lastStrike === null || Math.round(S.lastStrike) !== noteNow)
         strike(noteNow, 0.6 + 0.4*S.tvVol);
     }
     applyTheremin(S.midi, S.tvVol, S.voice, attack);
     S.voicePrev = S.voice;
   } else {
-    S.tvVol = 0; S.voice = false; S.voiceN = 0; S.snapOff = 0;
+    S.tvVol = 0; S.voice = false; S.voiceN = 0;
+    S.oe.t = 0; S.rawM = null; S.jit.length = 0; S.jitT.length = 0;  // 手离开，滤波器重来
     applyTheremin(null, 0, false, false);
     S.voicePrev = false;
   }
@@ -1898,6 +1955,7 @@ function draw(){
   syncBar();
   S.drawMs=S.drawMs*0.9+(performance.now()-t0)*0.1;
   if($("dbg").style.display!=="none"){
+    const _w = (cl(S.snap)*warpBase()).toFixed(2);
     $("dbg").textContent =
       `库 ${S.lib}  ${S.fps.toFixed(1)}fps  识别 ${S.infer.toFixed(1)}ms  绘制 ${S.drawMs.toFixed(1)}ms\n`+
       `手 ${S.nHands}\n`+
@@ -1906,6 +1964,7 @@ function draw(){
       `      左手 ${(S.left&&(performance.now()-S.lT)<120)?("y="+S.left.y.toFixed(3)+" 跟手"):"不在，已冻结"}  停稳档 ${S.okD===null?"—":S.okD}${S.menu?("  转盘 "+(S.item>=0?(DIRS[S.item]+" "+MENU.find(m=>m.dir===S.item).label):"中心")):""}\n`+
       `      张开度 ${S.openRaw.toFixed(3)}  10秒内 ${S.oMin.toFixed(3)}~${S.oMax.toFixed(3)}  基准 ${S.aOpen.toFixed(3)}  握拳<${S.grabAt.toFixed(3)} 松开>${S.freeAt.toFixed(3)}  ${S.fist?"【握拳】":"张开"}  档位${S.deckLocked?"已锁(动半档解锁)":"跟手"}\n`+
       `      识别 ${S.hz.toFixed(0)}/秒  画面 ${S.fps.toFixed(0)}/秒  （甩只按识别算，不按画面）\n`+
+      `右手抖动 ${jitTxt()}（2 秒窗口，滤波之前的原始读数）  吸附强度 s=${_w}  一个半音 ${pxPerSemi().toFixed(1)}px\n`+
       `声部 ${level.map(v=>v.toFixed(1)).join(" ")}\n\n`+
       `键：H 收栏 · D 关此栏`;
   }
