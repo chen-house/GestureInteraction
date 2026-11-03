@@ -12,7 +12,11 @@ if alive; then
 else
   echo "起服务器…"
   # nohup + disown：关掉这个终端窗口服务器也不会死。
-  nohup python3 -m http.server "$PORT" >/dev/null 2>&1 &
+  # 不让浏览器缓存页面：换了新版本，刷新就是新的（v41 起）
+  nohup python3 -c 'import http.server as h,functools as f
+class H(h.SimpleHTTPRequestHandler):
+    def end_headers(s): s.send_header("Cache-Control","no-store"); super().end_headers()
+h.ThreadingHTTPServer(("",'"$PORT"'),H).serve_forever()' >/dev/null 2>&1 &
   disown 2>/dev/null
   # 等它真的能应答，最多等 10 秒 —— 固定 sleep 1 在机器慢的时候不够
   for i in $(seq 1 20); do
@@ -25,7 +29,7 @@ if alive; then
   VER=$(curl -s "$URL" | grep -o '<title>[^<]*</title>' | sed 's/<[^>]*>//g')
   echo "✓ $VER  已就绪"
   echo "  $URL"
-  open "$URL"
+  open "$URL?t=$(date +%s)"     # 带时间戳打开：就算旧服务器还在跑，也拿到最新的页面
   echo
   echo "这个窗口现在可以关掉，服务器会继续跑。"
   echo "要停掉服务器：pkill -f 'http.server $PORT'"
