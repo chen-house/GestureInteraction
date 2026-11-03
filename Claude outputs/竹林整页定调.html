@@ -1,0 +1,227 @@
+<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>竹林整页定调</title>
+<style>html,body{margin:0;background:#0d1210}canvas{display:block;width:100vw;height:auto}</style></head>
+<body><canvas id="c" width="2880" height="1800"></canvas>
+<script>
+/* 整页定调（静态）。布局取 v37 实测：1440×900 CSS 像素，×2 画。
+   三层 + 环境：环境（树冠/光/远竹/根系纹理）不动、低对比；器身/刻度＝竹竿、枝、节、竹筒、竹鞭；活的＝白（两只鸟、在响的枝、在响的竹筒、笋尖）。 */
+const cv=document.getElementById('c'), x=cv.getContext('2d'); x.scale(2,2);
+const W=1440, H=900, HUE=152;
+const C=(l,a=1,s=14)=>`hsla(${HUE},${s}%,${l}%,${a})`;
+const WH=a=>`rgba(242,239,230,${a})`;
+const FONT=(w,s)=>`${w} ${s}px -apple-system,"PingFang SC","Noto Sans CJK TC",sans-serif`;
+let seed=11; const R=()=>((seed=(seed*16807)%2147483647)/2147483647);
+const leaf=(lx,ly,len,ang,fill,c=x)=>{ c.save(); c.translate(lx,ly); c.rotate(ang); c.fillStyle=fill;
+  c.beginPath(); c.moveTo(0,0); c.quadraticCurveTo(len*.5,-len*.17,len,0); c.quadraticCurveTo(len*.5,len*.12,0,0); c.fill(); c.restore(); };
+
+/* ── 版面（v37 实测） */
+const SPLIT=601, CULM_M=619, CULM_L=92, GROUND=846;
+const PITCH=[[279,"1'","C"],[319,"7","B"],[399,"6","A"],[478,"5","G"],[558,"4","F"],[597,"3","E"],[677,"2","D"],[757,"1","C"]];
+const TIER=[632,568,505,441,378,314];           // 0..5 档
+const DECK=3, dVol=0.62, tVol=0.78;
+const vault = u => 70 + 70*u*u;                 // 树冠下沿：中间高、两侧低（u∈[-1,1]）
+const vY = px => vault((px - W/2)/(W/2));
+
+/* 1 底：上暗下更暗，中上一片稍亮的空地 */
+let g=x.createLinearGradient(0,0,0,H); g.addColorStop(0,C(11,1,16)); g.addColorStop(.45,C(13,1,15)); g.addColorStop(1,C(6,1,14));
+x.fillStyle=g; x.fillRect(0,0,W,H);
+g=x.createRadialGradient(W*0.55,120,0,W*0.55,120,640); g.addColorStop(0,C(30,.22,18)); g.addColorStop(1,C(20,0));
+x.fillStyle=g; x.fillRect(0,0,W,H);
+
+/* 2 光束：从树冠的缝里斜着落下，很宽很虚，不成线 */
+for(const [sx,w,a,ang] of [[560,90,.07,.28],[820,140,.06,.22],[1010,70,.05,.30],[300,110,.045,.18]]){
+  x.save(); x.translate(sx, vY(sx)-10); x.rotate(ang); x.filter='blur(18px)';
+  const rg=x.createLinearGradient(0,0,0,760); rg.addColorStop(0,C(70,a*1.8,20)); rg.addColorStop(1,C(60,0));
+  x.fillStyle=rg; x.beginPath(); x.moveTo(-w*0.3,0); x.lineTo(w*0.3,0); x.lineTo(w*0.9,760); x.lineTo(-w*0.9,760); x.fill(); x.restore();
+}
+
+/* 3 远竹 */
+for(const [fx,fw,a,bl] of [[0.20,10,.06,4],[0.33,14,.07,5],[0.52,9,.05,3],[0.71,20,.05,7],[0.88,12,.07,4],[0.97,24,.04,8]]){
+  x.save(); x.filter=`blur(${bl}px)`; const cx=W*fx; x.fillStyle=C(40,a,12); x.fillRect(cx-fw/2,0,fw,GROUND);
+  for(let y=40+fx*90; y<GROUND; y+=90+fx*40){ x.fillStyle=C(52,a*1.3,12); x.fillRect(cx-fw/2-1,y,fw+2,1.5); }
+  x.restore();
+}
+/* 薄雾 */
+g=x.createLinearGradient(0,560,0,860); g.addColorStop(0,C(40,0)); g.addColorStop(.6,C(44,.07,12)); g.addColorStop(1,C(40,0));
+x.fillStyle=g; x.fillRect(0,0,W,H);
+
+/* 4 地面与根系纹理（环境层） */
+g=x.createLinearGradient(0,GROUND-6,0,H); g.addColorStop(0,C(9,0,14)); g.addColorStop(.15,C(8,.9,14)); g.addColorStop(1,C(5,1,14));
+x.fillStyle=g; x.fillRect(0,GROUND-6,W,H-GROUND+6);
+x.strokeStyle=C(30,.12,14); x.lineWidth=.8; x.lineCap='round';
+function root(x0,y0,ang,len,d){ if(d<=0||len<6) return; const x1=x0+Math.cos(ang)*len, y1=y0+Math.sin(ang)*len;
+  x.beginPath(); x.moveTo(x0,y0); x.quadraticCurveTo((x0+x1)/2+(R()-.5)*8,(y0+y1)/2,x1,y1); x.stroke();
+  root(x1,y1,ang+(R()-.5)*0.9,len*0.72,d-1); if(R()<0.6) root(x1,y1,ang+(R()-.5)*1.6,len*0.55,d-1); }
+for(const rx of [CULM_L, CULM_M, 330, 1050, 1300]) for(let i=0;i<5;i++) root(rx+(R()-.5)*20, GROUND+2, Math.PI*(0.2+R()*0.6), 18+R()*16, 4);
+
+/* 5 竹鞭＝音量：两条都从中间那根竹的根部长出，左边往左（鼓），右边往右（旋律）。
+     伸多远＝多响；梢头冒一颗笋尖（活的）。没长到的那段只留一道淡印（器身）。 */
+function rhizome(dir, frac, len){
+  const y=GROUND+4, x0=CULM_M, xT=x0+dir*len*frac, xFull=x0+dir*len;
+  x.strokeStyle=C(40,.25,12); x.lineWidth=1; x.setLineDash([2,5]);
+  x.beginPath(); x.moveTo(xT,y); x.lineTo(xFull,y); x.stroke(); x.setLineDash([]);
+  x.fillStyle=C(62,.8,14); x.beginPath();
+  const NS=60; for(let i=0;i<=NS;i++){ const t=i/NS, xx=x0+(xT-x0)*t, yy=y+Math.sin(t*9)*1.2, w=3.4-1.6*t; i?x.lineTo(xx,yy-w/2):x.moveTo(xx,yy-w/2); }
+  for(let i=NS;i>=0;i--){ const t=i/NS, xx=x0+(xT-x0)*t, yy=y+Math.sin(t*9)*1.2, w=3.4-1.6*t; x.lineTo(xx,yy+w/2); }
+  x.closePath(); x.fill();
+  for(let i=1;i<10;i++){ const nx=x0+dir*len*i/10; if((nx-xT)*dir>0) break;
+    x.fillStyle=C(80,.7,10); x.fillRect(nx-.8,y-3,1.6,6);
+    if(i%3===0){ x.strokeStyle=C(40,.35,12); x.lineWidth=.7; x.beginPath(); x.moveTo(nx,y+2); x.lineTo(nx+dir*4,y+12); x.stroke(); } }
+  /* 笋尖 */
+  /* 笋：三层笋壳，尖略向外弯 */
+  for(let q=0;q<3;q++){ const hh=24-q*6, ww=9-q*2.2, oy=-q*5;
+    x.fillStyle = q===2 ? WH(.95) : WH(.55+q*.18);
+    x.beginPath(); x.moveTo(xT-ww/2, y+oy+1);
+    x.quadraticCurveTo(xT-ww*0.3, y+oy-hh*0.6, xT+dir*3, y+oy-hh);
+    x.quadraticCurveTo(xT+ww*0.35, y+oy-hh*0.5, xT+ww/2, y+oy+1); x.fill(); }
+  x.font=FONT(400,11); x.fillStyle=C(82,.45,10); x.textBaseline='top';
+  x.textAlign=dir<0?'right':'left'; x.fillText('强', xFull, y+14);
+}
+rhizome(-1, dVol, CULM_M-40);
+rhizome(+1, tVol, W-40-CULM_M);
+x.font=FONT(400,11); x.fillStyle=C(82,.45,10); x.textAlign='center'; x.textBaseline='top'; x.fillText('静', CULM_M, GROUND+14);
+
+/* 6 竹竿（器身）。上端没入树冠，下端扎进土 */
+function culm(cx,w,top){
+  const cg=x.createLinearGradient(cx-w/2,0,cx+w/2,0);
+  cg.addColorStop(0,C(54,.9,16)); cg.addColorStop(.45,C(68,.92,14)); cg.addColorStop(1,C(40,.9,16));
+  x.fillStyle=cg; x.fillRect(cx-w/2,top,w,GROUND-top+4);
+}
+culm(CULM_M,9,40); culm(CULM_L,11,40);
+
+/* 7 中间那根：枝条＝音高线（v37 同一画法） */
+function branch(x0,x1,y,w0,w1,fill,sagX,sag){
+  const N=48, sw=110; const dy=t=>sag?sag*Math.exp(-Math.pow((x0+(x1-x0)*t-sagX)/sw,2)):0;
+  x.fillStyle=fill; x.beginPath();
+  for(let i=0;i<=N;i++){const t=i/N,w=(w0+(w1-w0)*t)/2,xx=x0+(x1-x0)*t; i?x.lineTo(xx,y+dy(t)-w):x.moveTo(xx,y+dy(t)-w);}
+  for(let i=N;i>=0;i--){const t=i/N,w=(w0+(w1-w0)*t)/2; x.lineTo(x0+(x1-x0)*t,y+dy(t)+w);} x.closePath(); x.fill();
+}
+const BIRD_X=1040, LIVE_Y=399;
+PITCH.forEach(([yy,jp,nm],m)=>{
+  const live = yy===LIVE_Y, bx0=CULM_M+5, bx1=W-48-(m%3)*8;
+  x.fillStyle=C(84,.75,10); x.fillRect(CULM_M-6,yy-1,12,2);
+  branch(bx0,bx1,yy,(m===0||m===7)?3:2.5,0.8, live?WH(.86):C(80,.48,10), BIRD_X, live?3:0);
+  leaf(bx0+2,yy,20,-0.6,C(60,.5,18)); if(m%2===0) leaf(bx0+4,yy,14,-1.0,C(60,.34,18));
+  let r=(m+1)*9301; const RN=()=>((r=(r*16807)%2147483647)/2147483647);
+  for(let nx=bx0+70+RN()*60; nx<bx1-30; nx+=60+RN()*95){
+    x.fillStyle=live?WH(.6):C(82,.4,10); x.fillRect(nx-.5,yy-2,1,4);
+    if(Math.abs(nx-BIRD_X)<60) continue;
+    const n=RN()<.35?0:RN()<.6?1:RN()<.85?2:3;
+    for(let q=0;q<n;q++) leaf(nx+1,yy+1,9+RN()*8,.35+RN()*.9,C(52+RN()*12,.18+RN()*.16,18));
+  }
+  x.textAlign='right'; x.textBaseline='middle';
+  x.font=FONT(live?500:400, live?14:12); x.fillStyle=live?WH(.92):C(82,.5,10); x.fillText(jp,CULM_M-10,yy);
+  x.font=FONT(400,8); x.fillStyle=C(82,.32,10); x.fillText(nm,CULM_M-24,yy+.5);
+});
+x.textAlign='right'; x.textBaseline='bottom'; x.font=FONT(300,22); x.fillStyle=WH(.9); x.fillText('A4', W-48, LIVE_Y-7);
+
+/* 8 左边那根：竹节＝档位，节上挂竹筒＝乐器。0..当前档那段竹竿提亮 */
+const GROUPS=[[],[['surdo',1.0]],[['caixa',.7]],[['cuíca',.6],['repinique',.55]],[['tamborim',.45],['agogô',.4]],[['reco-reco',.35],['chocalho',.3]]];
+x.save(); x.globalAlpha=.55; x.fillStyle=WH(.5); x.fillRect(CULM_L-5.5, TIER[DECK], 11, TIER[0]-TIER[DECK]+40); x.restore();
+TIER.forEach((yy,d)=>{
+  const on = d<=DECK && d>0, cur=d===DECK;
+  x.fillStyle = d<=DECK ? WH(.85) : C(84,.7,10); x.fillRect(CULM_L-8,yy-1.2,16,2.4);
+  x.textAlign='left'; x.textBaseline='middle'; x.font=FONT(cur?500:400, cur?13:11);
+  x.fillStyle = cur?WH(.92):C(82,.45,10); x.fillText(String(d), CULM_L+12, yy);
+  /* 导轨：从竹节伸出的一根细横枝，乐器挂在上面 */
+  if(GROUPS[d].length){
+    x.strokeStyle = on?C(80,.42,10):C(70,.16,10); x.lineWidth=1;
+    x.beginPath(); x.moveTo(CULM_L+26,yy); x.lineTo(SPLIT-50,yy); x.stroke();
+  }
+  GROUPS[d].forEach(([name,sz],i)=>{
+    const tx=CULM_L+70+i*190, w=8+sz*14, h=18+sz*22;
+    /* 竹筒：一截两头带节的竹管，挂在横枝下面 */
+    x.strokeStyle = on?WH(.75):C(80,.45,10); x.lineWidth=1;
+    x.beginPath(); x.moveTo(tx,yy); x.lineTo(tx,yy+4); x.stroke();
+    const shake = on && (name==='surdo'||name==='repinique') ? 1.5 : 0;   // 正在击打的那几件轻轻一震
+    x.fillStyle = on? WH(.18+sz*.1) : C(60,.10,12);
+    x.strokeStyle = on? WH(.85) : C(80,.45,10); x.lineWidth=1.2;
+    x.beginPath(); x.roundRect(tx-w/2+shake, yy+4, w, h, 2.5); x.fill(); x.stroke();
+    x.beginPath(); x.moveTo(tx-w/2+shake, yy+4+h*.5); x.lineTo(tx+w/2+shake, yy+4+h*.5); x.stroke();
+    x.font=FONT(400,11); x.fillStyle = on?WH(.85):C(82,.45,10); x.textAlign='left';
+    x.fillText(name, tx+w/2+8, yy+4+h*.5);
+  });
+});
+x.font=FONT(400,11); x.fillStyle=C(82,.45,10); x.textAlign='left'; x.textBaseline='middle';
+x.fillText('沿竹竿上下选档 · 放手保持', CULM_L+12, TIER[0]+46);
+
+/* 9 啄木鸟：抓在左竹竿的左侧，身体直立，硬尾撑住竹竿，长喙朝右啄竹 —— 也朝着右边那只鸟 */
+function woodpecker(px,py,s){
+  x.save(); x.translate(px,py); x.scale(s,s); x.fillStyle=WH(.96);
+  x.beginPath();                                   // 身体（直立的长卵形）
+  x.moveTo(4,-30); x.bezierCurveTo(16,-24,16,8,8,22); x.lineTo(2,24);
+  x.bezierCurveTo(-10,14,-12,-18,4,-30); x.fill();
+  x.beginPath(); x.moveTo(4,20); x.lineTo(12,44); x.lineTo(6,44); x.lineTo(-1,22); x.fill();   // 硬尾，撑在竹上
+  x.beginPath(); x.arc(9,-34,8,0,7); x.fill();                                                    // 头
+  x.beginPath(); x.moveTo(15,-37); x.lineTo(30,-34); x.lineTo(15,-31); x.fill();                  // 长喙
+  x.fillStyle=C(12,1,16); x.beginPath(); x.arc(11,-36,1.5,0,7); x.fill();
+  x.fillStyle=C(40,.55,14);                                                                       // 翅上的横斑
+  for(let i=0;i<4;i++){ x.beginPath(); x.ellipse(1,-12+i*7,4.5,1.3,-.2,0,7); x.fill(); }
+  x.strokeStyle=WH(.9); x.lineWidth=1.6;                                                          // 爪抓竹
+  x.beginPath(); x.moveTo(10,6); x.lineTo(16,8); x.moveTo(10,14); x.lineTo(16,16); x.stroke();
+  x.restore();
+}
+woodpecker(CULM_L-36, TIER[DECK]-8, 1.0);
+
+/* 10 中间那根的枝上：鸣禽收翅落在 6 上，转头朝左，和啄木鸟对着 */
+function songbird(bx,by,s){
+  x.save(); x.translate(bx,by); x.scale(-s,s); x.fillStyle=WH(.97);
+  x.beginPath(); x.moveTo(-34,-14); x.bezierCurveTo(-30,-40,6,-46,18,-30);
+  x.bezierCurveTo(30,-16,22,-2,4,0); x.lineTo(-40,6); x.lineTo(-58,14); x.lineTo(-44,0);
+  x.bezierCurveTo(-40,-4,-37,-8,-34,-14); x.fill();
+  x.beginPath(); x.arc(14,-36,13,0,7); x.fill();
+  x.beginPath(); x.moveTo(25,-38); x.lineTo(36,-34); x.lineTo(25,-31); x.fill();
+  x.fillStyle=C(12,1,16); x.beginPath(); x.arc(17,-38,2.2,0,7); x.fill();
+  x.strokeStyle=C(70,.45,10); x.lineWidth=1.6; x.beginPath(); x.moveTo(-20,-26); x.quadraticCurveTo(-2,-22,6,-8); x.stroke();
+  x.strokeStyle=WH(.9); x.lineWidth=2; x.beginPath(); x.moveTo(-2,0); x.lineTo(-4,6); x.moveTo(6,-1); x.lineTo(6,6); x.stroke();
+  x.restore();
+}
+songbird(BIRD_X, LIVE_Y+1, 0.42);
+
+/* 11 树冠：穹顶。下沿是弧，中间高、两侧低；叶影层层叠，中间留几道缝透光 */
+x.save();
+x.fillStyle=C(5,1,16); x.beginPath(); x.moveTo(0,0); x.lineTo(W,0);
+for(let px=W;px>=0;px-=8) x.lineTo(px, vY(px)-14); x.closePath(); x.fill();
+/* 下沿一道软阴影，让弧线读得出来 */
+x.save(); x.filter='blur(10px)'; x.strokeStyle=C(4,.8,16); x.lineWidth=26;
+x.beginPath(); for(let px=0;px<=W;px+=8) px?x.lineTo(px,vY(px)-6):x.moveTo(px,vY(px)-6); x.stroke(); x.restore();
+const gaps=[560,820,1010,300];
+for(let i=0;i<2600;i++){
+  const px=R()*W, edge=vY(px), py=edge*(1.08 - Math.pow(R(),1.8)*1.1);
+  if(gaps.some(gx=>Math.abs(px-gx)<26) && py>edge-50 && R()<.85) continue;   // 留缝
+  const near = py/edge;                                                        // 越靠下沿越亮一点（受光）
+  leaf(px,py, 22+R()*34, Math.PI*(0.15+R()*0.7)*(R()<.5?1:-1)+Math.PI*0.5*(R()<.5?0:1),
+       C(8+near*12+R()*4, .55+R()*.4, 18));
+}
+/* 缝里的光 */
+for(const gx of gaps){ const gg=x.createRadialGradient(gx,vY(gx)-24,0,gx,vY(gx)-24,40);
+  gg.addColorStop(0,C(70,.22,20)); gg.addColorStop(1,C(60,0)); x.fillStyle=gg; x.fillRect(gx-40,vY(gx)-64,80,80); }
+x.restore();
+
+/* 12 顶栏：直接压在树冠上，不另起一条黑带 */
+const CELLS=[['档位','3',true],['音色','手碟 · 敲'],['谱子','欢乐颂'],['节奏密度','满'],['速度','140'],['发音','● 出声'],['音阶','七声'],['手','2']];
+let cx=20;
+CELLS.forEach(([k,v,big],i)=>{
+  x.textAlign='left'; x.textBaseline='alphabetic';
+  x.font=FONT(400,11); x.fillStyle=C(82,.5,10); x.fillText(k,cx,22);
+  x.font=FONT(400, big?24:16); x.fillStyle=WH(.9); x.fillText(v,cx,big?50:46);
+  cx += i===0?90:(i===1?110:82);
+});
+
+/* 13 谱子：树冠下那片空地 */
+x.font=FONT(400,11); x.fillStyle=C(82,.45,10); x.textAlign='left'; x.fillText('欢乐颂　贝多芬 1824，公有领域', CULM_M+20, 134);
+const rows=[["3","3","4","5","|","5","4","3","2","|","1","1","2","3","|","3","-","2","-"],["3","3","4","5","|","5","4","3","2","|","1","1","2","3","|","2","-","1","-"]];
+rows.forEach((row,ri)=>{ let tx=CULM_M+16; const step=(W-50-CULM_M-16)/19;
+  row.forEach((t,i)=>{ if(t==="|"){ x.fillStyle=C(70,.2); x.fillRect(tx+step*.3,148+ri*34,1,22); tx+=step*.6; return; }
+    const hit=ri===0&&i===2; x.font=FONT(hit?500:400,hit?19:17); x.fillStyle=hit?WH(.92):C(82,.48,10);
+    x.textAlign='center'; x.textBaseline='middle'; x.fillText(t,tx+step*.5,160+ri*34); tx+=step; }); });
+
+/* 14 设置标签 */
+x.fillStyle=C(16,.9,14); x.beginPath(); x.roundRect(W-22,410,30,80,6); x.fill();
+x.font=FONT(400,12); x.fillStyle=C(82,.6,10); x.textAlign='center'; x.fillText('‹',W-9,428); x.fillText('设',W-9,450); x.fillText('置',W-9,468);
+
+/* 15 颗粒 */
+x.setTransform(1,0,0,1,0,0);
+const id=x.getImageData(0,0,cv.width,cv.height), d=id.data; let sd=7;
+for(let i=0;i<d.length;i+=4){ sd=(sd*16807)%2147483647; const n=(sd/2147483647-.5)*12; d[i]+=n; d[i+1]+=n; d[i+2]+=n; }
+x.putImageData(id,0,0);
+</script></body></html>
