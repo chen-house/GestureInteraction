@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>手势乐器 v49</title>
+<title>手势乐器 v52</title>
 <style>
-  :root{ --ink:#e4e0d8; --paper:#121715; --line:#313f39; --dim:#8a8f88;
-         --hot:#e89254; --bar:62px;
+  :root{ --ink:#24382a; --paper:#B4C99C; --line:rgba(28,43,32,.22); --dim:#55644f;
+         --hot:#9A4A18; --bar:62px;
     /* 视觉规则（方案文档第二节）。所有尺寸只从这里取。
        底面三层：背景最暗 → 乐器面板 → 侧板最亮、偏暖 */
-    --bg:#121715; --panel:#1a231f; --side:#1f2924;
+    --bg:#B4C99C; --panel:#C4D6AE; --side:#E3ECD6;
     /* 字号只有五档 */
     --fs1:11px; --fs2:13px; --fs3:16px; --fs4:24px; --fs5:40px;
     /* 圆角：刻度 0，控件/卡片 8，旋钮/灯全圆 */
@@ -49,7 +49,7 @@
   body.folded #gi-side{ transform:translateX(230px); }
   #gi-tab{ position:fixed; top:calc(var(--bar) + 16px); right:230px; z-index:2; width:22px; height:26px;
     border:1px solid var(--line); border-right:none; border-radius:3px 0 0 3px;
-    background:rgba(18,23,21,.92); color:var(--ink); cursor:pointer; opacity:.45;
+    background:rgba(227,236,214,.92); color:var(--ink); cursor:pointer; opacity:.6;
     display:flex; align-items:center; justify-content:center; transition:right .22s ease; }
   #gi-tab:hover{ opacity:1; }
   /* 收起之后：右边缘正中一枚竖排的标签，写着「设置」，看得见、点得到。
@@ -88,7 +88,7 @@
   /* 启动页：浏览器有两道门 —— 音频要一次用户手势才能出声，摄像头要授权。
      一次点击能同时满足两者，所以合成一道门，一个按钮。 */
   #gi-start{ position:fixed; inset:0; z-index:30; display:flex; align-items:center;
-    justify-content:center; background:#0d0e10; }
+    justify-content:center; background:#C9D9B4; }
   #gi-start[hidden]{ display:none; }
   #gi-start .card{ text-align:center; max-width:460px; padding:0 28px; }
   #gi-start h1{ font-size:17px; font-weight:400; letter-spacing:.2em; margin:0 0 10px;
@@ -97,18 +97,18 @@
   #gi-go{ font:inherit; font-size:13px; letter-spacing:.1em; color:var(--ink);
     background:none; border:1px solid var(--line); border-radius:3px;
     padding:11px 30px; cursor:pointer; transition:border-color .2s,color .2s; }
-  #gi-go:hover{ border-color:var(--hot); color:var(--hot); }
+  #gi-go:hover{ border-color:#9A4A18; color:#9A4A18; }
   #gi-go[disabled]{ opacity:.4; cursor:default; }
-  #gi-why{ margin:22px 0 0; font-size:11px; line-height:1.9; color:#e8a076; min-height:1em;
+  #gi-why{ margin:22px 0 0; font-size:11px; line-height:1.9; color:#9A4A18; min-height:1em;
     white-space:pre-wrap; }
   #gi-hint{ position:fixed; left:28px; bottom:22px; z-index:9; font-size:11px; opacity:.45;
     padding:5px 11px; border:1px solid var(--line); border-radius:3px;
-    background:rgba(18,23,21,.85); color:var(--ink); pointer-events:none; transition:opacity .4s; }
+    background:rgba(227,236,214,.85); color:var(--ink); pointer-events:none; transition:opacity .4s; }
   #gi-hint.gone{ opacity:0; }
   /* v48：录制按钮。它是网页元素，不在画布里，所以不会被录进视频。 */
   /* v49：挪到右上角。右下角是音量尺的「强」，挤在一起；右上是树冠，纯装饰 */
   #gi-rec{ position:fixed; right:18px; top:14px; z-index:9; display:flex; align-items:center; gap:8px;
-    font:inherit; font-size:var(--fs2); color:var(--ink); background:rgba(18,23,21,.55);
+    font:inherit; font-size:var(--fs2); color:var(--ink); background:rgba(255,255,255,.45);
     border:1px solid var(--line); border-radius:999px; padding:4px 12px 4px 9px; cursor:pointer;
     opacity:.5; transition:opacity .2s, border-color .2s; }
   #gi-rec:hover{ opacity:1; }
@@ -142,7 +142,7 @@
 <div id="gi-tab"><span>‹</span><span>设</span><span>置</span></div>
 
 <div id="gi-side">
-  <h2>手势乐器 <span style="opacity:.35;font-weight:400">v49</span></h2>
+  <h2>手势乐器 <span style="opacity:.35;font-weight:400">v52</span></h2>
   <div>
     <div class="lab"><span>滑音</span><span id="gi-glideval">30 ms</span></div>
     <input id="gi-glide" type="range" min="0" max="400" step="10" value="30">
@@ -273,16 +273,16 @@
   <div class="sec">
     <label style="display:flex;justify-content:space-between;cursor:pointer;opacity:.6">
       <span>摄像头</span>
-      <input id="gi-cam" type="checkbox" checked style="accent-color:#e89254">
+      <input id="gi-cam" type="checkbox" checked style="accent-color:#46621F">
     </label>
     <label style="display:flex;justify-content:space-between;cursor:pointer;opacity:.6;margin-top:8px">
       <span>录制时带上摄像头小窗</span>
-      <input id="gi-reccam" type="checkbox" style="accent-color:#e89254">
+      <input id="gi-reccam" type="checkbox" style="accent-color:#46621F">
     </label>
   </div>
   <details class="help">
     <summary>诊断</summary>
-    <div id="gi-msg" class="note" style="color:#e8a076"></div>
+    <div id="gi-msg" class="note" style="color:#9A4A18"></div>
     <div id="gi-dbg"></div>
   </details>
 </div>
@@ -725,8 +725,8 @@ const PINCH_FRAMES_ON = 1, PINCH_FRAMES_OFF = 2;
    sub   次要刻度（非音阶音、辅助线）
    hot   正在发生的那一个 */
 const FS  = { xs:11, s:13, m:16, l:24, xl:40 };            // 乘 k，和 CSS 的 --fs1..5 一致
-const INK = a => `rgba(228,224,216,${a})`;
-const ACC = a => `rgba(232,146,84,${a})`;
+const INK = a => `rgba(28,43,32,${a})`;
+const ACC = a => `rgba(154,74,24,${a})`;
 const LW  = { edge:1.6, main:1.2, tick:1, bold:3.2 };          // 乘 k
 /* 元素三层。暖白压在背景 #121315 上实测对比度：
      器身 0.12–0.18 → 1.3–1.6:1   看得见，退在后面
@@ -735,15 +735,18 @@ const LW  = { edge:1.6, main:1.2, tick:1, bold:3.2 };          // 乘 k
      将要（橙）≥ 0.75
    所有颜色只从这四层取。 */
 const LY  = { bodyLo:.12, body:.16, scale:.45, scaleHi:.52, live:.80, will:.82 };
-const BODY  = (m=1) => INK(Math.min(.18, LY.body*m));
-const SCL = (m=1) => INK(Math.min(LY.scaleHi, Math.max(.40, LY.scale*m)));
-const LIVE  = (m=1) => INK(Math.min(.95, Math.max(.70, LY.live*m)));
+const BODY  = (m=1) => INK(Math.min(0.24, 0.21*m));
+const SCL = (m=1) => INK(Math.min(0.72, Math.max(0.63, 0.63*m)));
+const LIVE  = (m=1) => INK(Math.min(.98, Math.max(0.92, 0.92*m)));
 const WILL  = (m=1) => ACC(Math.min(.95, Math.max(.75, LY.will*m)));
-/* ── 竹林（v37）。整页只有一个色相：竹青 152°。白色是「活的」，橙只留给「将要」和警告。
+/* ── v50：春天「午后透光」。浅底深字：背景 #B4C99C 一带，文字是墨绿，三层对比按浅底重算
+   （器身 1.45:1、刻度 3.5:1、正在响的 7:1）。前景里沿用的 BAM() 把明度倒过来用：
+   暗底上的亮线 → 浅底上的深线。色相从竹青 152° 换成嫩竹黄绿 96°。
+   ── 竹林（v37）。白色是「活的」，橙只留给「将要」和警告。
    背景是静态的：远竹、雾、两簇失焦的叶、颗粒、左上一处光 —— 只在尺寸变化时重画一次，
    每帧只贴图，不进入三层（它比器身还低一层，是环境）。 */
-const BAM_H = 152;
-const BAM = (l, a=1, s=14) => `hsla(${BAM_H},${s}%,${l}%,${a})`;
+const BAM_H = 96;
+const BAM = (l, a=1, s=14) => `hsla(${BAM_H},${Math.min(40,s*1.8)}%,${Math.max(18,100-l*0.75)}%,${a})`;
 let BGL = null;
 function bambooLeaf(c, lx, ly, len, ang, fill){
   c.save(); c.translate(lx,ly); c.rotate(ang); c.fillStyle=fill;
@@ -754,79 +757,45 @@ function bambooLeaf(c, lx, ly, len, ang, fill){
 /* 树冠下沿：穹顶，中间高、两侧低（CSS 像素：70 + 70u²，u∈[-1,1]）*/
 function vaultY(px, W, k){ const u = (px - W/2)/(W/2); return (70 + 70*u*u)*k; }
 function bambooBG(W, H, k, ground){
-  const c2 = document.createElement("canvas"); c2.width=W; c2.height=H;
-  const c = c2.getContext("2d");
-  let g=c.createLinearGradient(0,0,0,H); g.addColorStop(0,BAM(15,1,16)); g.addColorStop(1,BAM(7,1,14));
+  const c2 = document.createElement("canvas"); c2.width=W; c2.height=H; const c = c2.getContext("2d");
+  let g=c.createLinearGradient(0,0,0,H); g.addColorStop(0,"#D3E0BF"); g.addColorStop(.45,"#B4C99C"); g.addColorStop(1,"#9DB585");
   c.fillStyle=g; c.fillRect(0,0,W,H);
-  g=c.createRadialGradient(W*0.30,-H*0.08,0,W*0.30,-H*0.08,H*1.05);
-  g.addColorStop(0,BAM(34,.26,18)); g.addColorStop(1,BAM(20,0));
-  c.fillStyle=g; c.fillRect(0,0,W,H);
-  /* 远竹：极淡、失焦、带节 */
-  for(const [fx,fw,a,bl] of [[0.08,14,.06,6],[0.31,18,.07,5],[0.55,12,.06,4],[0.68,26,.05,9],[0.86,16,.07,4],[0.95,30,.04,10]]){
-    c.save(); c.filter=`blur(${bl*k}px)`; c.fillStyle=BAM(40,a,12);
-    const cx=W*fx, w=fw*k; c.fillRect(cx-w/2,-20,w,H+40);
-    for(let y=(fx*997%1)*140*k; y<H; y+=(120+fx*60)*k){ c.fillStyle=BAM(52,a*1.3,12); c.fillRect(cx-w/2-2*k,y,w+4*k,2*k); }
-    c.restore();
-  }
-  /* 光束：从树冠的缝里斜着落下，很宽很虚，不成线（细了会被看成音高线） */
-  /* v46：树冠稀一些，光多照进来 —— 缝从 4 道加到 7 道，光束亮一些 */
+  for(const [fx,fw,a,bl] of [[0.08,14,.10,6],[0.31,18,.12,5],[0.55,12,.10,4],[0.68,26,.08,9],[0.86,16,.12,4],[0.95,30,.07,10]]){
+    c.save(); c.filter=`blur(${bl*k}px)`; c.fillStyle="rgba(90,120,70,"+a+")"; const cx=W*fx, w=fw*k; c.fillRect(cx-w/2,-20,w,H+40);
+    for(let y=(fx*997%1)*140*k; y<H; y+=(120+fx*60)*k){ c.fillStyle="rgba(90,120,70,"+(a*1.6)+")"; c.fillRect(cx-w/2-2*k,y,w+4*k,2*k); }
+    c.restore(); }
   const GAPS = [0.08, 0.21, 0.39, 0.49, 0.57, 0.70, 0.86];
-  for(const [gf,w,a,ang] of [[0.08,80,.05,.20],[0.21,110,.06,.18],[0.39,90,.09,.28],[0.49,70,.06,.25],
-                             [0.57,140,.085,.22],[0.70,70,.07,.30],[0.86,100,.06,.26]]){
+  for(const [gf,w,a,ang] of [[0.08,80,.25,.20],[0.21,110,.3,.18],[0.39,90,.4,.28],[0.49,70,.3,.25],[0.57,140,.4,.22],[0.70,70,.3,.30],[0.86,100,.3,.26]]){
     const sx=W*gf; c.save(); c.translate(sx, vaultY(sx,W,k)-10*k); c.rotate(ang); c.filter=`blur(${18*k}px)`;
-    const rg=c.createLinearGradient(0,0,0,760*k); rg.addColorStop(0,BAM(70,a*1.8,20)); rg.addColorStop(1,BAM(60,0));
-    c.fillStyle=rg; c.beginPath(); c.moveTo(-w*0.3*k,0); c.lineTo(w*0.3*k,0); c.lineTo(w*0.9*k,760*k); c.lineTo(-w*0.9*k,760*k); c.fill(); c.restore();
-  }
-  /* 一层薄雾 */
-  g=c.createLinearGradient(0,H*0.55,0,H*0.88); g.addColorStop(0,BAM(40,0)); g.addColorStop(.5,BAM(46,.08,12)); g.addColorStop(1,BAM(40,0));
-  c.fillStyle=g; c.fillRect(0,0,W,H);
-  /* 角上两簇失焦的大叶：只给纵深 */
-  const sprig=(cx,cy,sc,rot,bl)=>{ c.save(); c.filter=`blur(${bl*k}px)`; c.translate(cx,cy); c.rotate(rot); c.scale(sc*k,sc*k);
-    for(const [an,l] of [[-0.2,1],[0.25,.9],[0.7,.8],[-0.65,.85],[1.1,.7]]) bambooLeaf(c,0,0,120*l,an,BAM(22,.8,18));
-    c.restore(); };
-  /* 地面与根系纹理（环境层，极淡） */
+    const rg=c.createLinearGradient(0,0,0,760*k); rg.addColorStop(0,"rgba(255,246,215,"+a+")"); rg.addColorStop(1,"rgba(255,246,215,0)");
+    c.fillStyle=rg; c.beginPath(); c.moveTo(-w*0.3*k,0); c.lineTo(w*0.3*k,0); c.lineTo(w*0.9*k,760*k); c.lineTo(-w*0.9*k,760*k); c.fill(); c.restore(); }
   if(ground){
-    g=c.createLinearGradient(0,ground-6*k,0,H); g.addColorStop(0,BAM(9,0,14)); g.addColorStop(.15,BAM(8,.9,14)); g.addColorStop(1,BAM(5,1,14));
+    g=c.createLinearGradient(0,ground-6*k,0,H); g.addColorStop(0,"rgba(0,0,0,0)"); g.addColorStop(.2,"#9DB585"); g.addColorStop(1,"#9DB585");
     c.fillStyle=g; c.fillRect(0,ground-6*k,W,H-ground+6*k);
     let rs=13; const RR=()=>((rs=(rs*16807)%2147483647)/2147483647);
-    c.strokeStyle=BAM(30,.12,14); c.lineWidth=0.8*k; c.lineCap="round";
+    c.strokeStyle="rgba(60,90,50,.22)"; c.lineWidth=0.8*k; c.lineCap="round";
     const root=(x0,y0,ang,len,d)=>{ if(d<=0||len<6*k) return; const x1=x0+Math.cos(ang)*len, y1=y0+Math.sin(ang)*len;
       c.beginPath(); c.moveTo(x0,y0); c.quadraticCurveTo((x0+x1)/2+(RR()-.5)*8*k,(y0+y1)/2,x1,y1); c.stroke();
       root(x1,y1,ang+(RR()-.5)*0.9,len*0.72,d-1); if(RR()<0.6) root(x1,y1,ang+(RR()-.5)*1.6,len*0.55,d-1); };
     for(const fx of [0.05,0.23,0.43,0.72,0.9]) for(let i=0;i<5;i++) root(W*fx+(RR()-.5)*20*k, ground+2*k, Math.PI*(0.2+RR()*0.6), (18+RR()*16)*k, 4);
   }
-  /* 树冠：穹顶。下沿是弧；叶影层层叠，集中在下沿一带，留几道缝透光 */
   {
-    /* 叶子后面是天光，不再是一整块实黑：上方先铺一层亮一点的天，再盖半透明的暗 */
-    { const sky=c.createLinearGradient(0,0,0,vaultY(W/2,W,k)+60*k);
-      sky.addColorStop(0,BAM(30,.55,18)); sky.addColorStop(1,BAM(22,0,16));
-      c.fillStyle=sky; c.fillRect(0,0,W,vaultY(0,W,k)+60*k); }
-    c.fillStyle=BAM(5,.45,16); c.beginPath(); c.moveTo(0,0); c.lineTo(W,0);
-    for(let px=W;px>=0;px-=8*k) c.lineTo(px, vaultY(px,W,k)-14*k); c.closePath(); c.fill();
-    c.save(); c.filter=`blur(${10*k}px)`; c.strokeStyle=BAM(4,.8,16); c.lineWidth=26*k;
-    c.beginPath(); for(let px=0;px<=W;px+=8*k) px?c.lineTo(px,vaultY(px,W,k)-6*k):c.moveTo(px,vaultY(px,W,k)-6*k); c.stroke(); c.restore();
     let ls=11; const RL=()=>((ls=(ls*16807)%2147483647)/2147483647);
-    const NL = Math.round(1150 * W/(1440*k));                 // v46：2600 → 1150 片
+    const NL = Math.round(1150 * W/(1440*k));
     for(let i=0;i<NL;i++){
       const px=RL()*W, edge=vaultY(px,W,k), py=edge*(1.08 - Math.pow(RL(),1.8)*1.1);
-      const gd = Math.min(...GAPS.map(gf=>Math.abs(px-W*gf)))/(40*k);      // 离缝中心多远（以 40px 计）
-      if(gd < 1 && py > edge-60*k && RL() < 0.55*(1-gd)) continue;          // 越近越稀，但不会空出一整列
-      const near=py/edge;
+      const gd = Math.min(...GAPS.map(gf=>Math.abs(px-W*gf)))/(40*k);
+      if(gd < 1 && py > edge-60*k && RL() < 0.55*(1-gd)) continue;
+      const near=py/edge, l=50-(near)*(50-32)+RL()*6;
       bambooLeaf(c, px, py, (22+RL()*34)*k, Math.PI*(0.15+RL()*0.7)*(RL()<.5?1:-1)+Math.PI*0.5*(RL()<.5?0:1),
-                 BAM(8+near*12+RL()*4, .45+RL()*.4, 18));
+                 `hsla(${88+RL()*16},38%,${l}%,${0.6+RL()*0.30})`);
     }
-    for(const gf of GAPS){ const gx=W*gf, gy=vaultY(gx,W,k)-30*k;
-      c.save(); c.filter=`blur(${14*k}px)`;
-      const gg=c.createRadialGradient(gx,gy,0,gx,gy,70*k);
-      gg.addColorStop(0,BAM(70,.22,20)); gg.addColorStop(1,BAM(60,0));
+    for(const gf of GAPS){ const gx=W*gf, gy=vaultY(gx,W,k)-30*k; c.save(); c.filter=`blur(${14*k}px)`;
+      const gg=c.createRadialGradient(gx,gy,0,gx,gy,70*k); gg.addColorStop(0,"rgba(255,250,225,.55)"); gg.addColorStop(1,"rgba(255,250,225,0)");
       c.fillStyle=gg; c.beginPath(); c.ellipse(gx,gy,70*k,46*k,0,0,7); c.fill(); c.restore(); }
   }
-  /* 颗粒 */
-  try{
-    const id=c.getImageData(0,0,W,H), d=id.data; let sd=7;
-    for(let i=0;i<d.length;i+=4){ sd=(sd*16807)%2147483647; const v=(sd/2147483647-.5)*12; d[i]+=v; d[i+1]+=v; d[i+2]+=v; }
-    c.putImageData(id,0,0);
-  }catch(e){}
+  try{ const id=c.getImageData(0,0,W,H), d=id.data; let sd=7;
+    for(let i=0;i<d.length;i+=4){ sd=(sd*16807)%2147483647; const v=(sd/2147483647-.5)*7; d[i]+=v; d[i+1]+=v; d[i+2]+=v; } c.putImageData(id,0,0); }catch(e){}
   return c2;
 }
 /* 竹竿：从 y0 到 y1，顶端 12% 淡进树冠。先画进小画布、在那张上做 destination-in 再贴回
@@ -840,7 +809,7 @@ function drawCulm(c, cx, y0, y1, cw){
       oc = document.createElement("canvas"); oc.width=cwI; oc.height=chI;
       const o = oc.getContext("2d");
       const g2 = o.createLinearGradient(1,0,1+cw,0);
-      g2.addColorStop(0, BAM(56,.85,16)); g2.addColorStop(.45, BAM(70,.9,14)); g2.addColorStop(1, BAM(42,.85,16));
+      g2.addColorStop(0,"#C3D7A2"); g2.addColorStop(.45,"#DDEAC6"); g2.addColorStop(1,"#9CB97C");
       o.fillStyle=g2; o.fillRect(1,0,cw,chI);
       const f2 = o.createLinearGradient(0,0,0,chI);
       f2.addColorStop(0,"rgba(0,0,0,0)"); f2.addColorStop(0.12,"rgba(0,0,0,1)"); f2.addColorStop(1,"rgba(0,0,0,1)");
@@ -854,20 +823,23 @@ function drawCulm(c, cx, y0, y1, cw){
 /* 啄木鸟：左手。抓在左竹竿的左侧，身体直立、硬尾撑竹、长喙朝右。
    peck 0..1：每个四分拍头往竹子一点 —— 速度就在这一下一下里。 */
 function drawWoodpecker(c, px, py, s, a, peck){
-  c.save(); c.translate(px,py); c.scale(s,s);
-  const W = `rgba(242,239,230,${a})`; c.fillStyle=W;
-  c.beginPath(); c.moveTo(4,-30); c.bezierCurveTo(16,-24,16,8,8,22); c.lineTo(2,24);
+  /* 大斑啄木鸟：墨黑、白斑、尾下一点朱红 */
+  c.save(); c.translate(px,py); c.scale(s,s); c.globalAlpha=a;
+  const K="#2B2B28", Wt="#F4F1E8", RED="#C8462E";
+  c.fillStyle=K; c.beginPath(); c.moveTo(4,-30); c.bezierCurveTo(16,-24,16,8,8,22); c.lineTo(2,24);
   c.bezierCurveTo(-10,14,-12,-18,4,-30); c.fill();
-  c.beginPath(); c.moveTo(4,20); c.lineTo(12,44); c.lineTo(6,44); c.lineTo(-1,22); c.fill();
+  c.fillStyle=Wt; c.beginPath(); c.moveTo(8,-24); c.bezierCurveTo(15,-14,14,6,9,16); c.lineTo(6,14); c.bezierCurveTo(9,2,9,-12,6,-22); c.fill();
+  c.fillStyle=RED; c.beginPath(); c.ellipse(5,19,4,4.5,0,0,7); c.fill();
+  c.fillStyle=K; c.beginPath(); c.moveTo(4,20); c.lineTo(12,44); c.lineTo(6,44); c.lineTo(-1,22); c.fill();
   c.save(); c.translate(peck*4, peck*1.5); c.rotate(peck*0.12);
-  c.beginPath(); c.arc(9,-34,8,0,7); c.fill();
-  c.beginPath(); c.moveTo(15,-37); c.lineTo(30,-34); c.lineTo(15,-31); c.fill();
-  c.fillStyle=BAM(12,1,16); c.beginPath(); c.arc(11,-36,1.5,0,7); c.fill();
+  c.fillStyle=K; c.beginPath(); c.arc(9,-34,8,0,7); c.fill();
+  c.fillStyle=Wt; c.beginPath(); c.ellipse(11,-32,4.5,3,0.2,0,7); c.fill();
+  c.fillStyle=RED; c.beginPath(); c.arc(4,-38,3,0,7); c.fill();
+  c.fillStyle="#3B3A33"; c.beginPath(); c.moveTo(15,-37); c.lineTo(30,-34); c.lineTo(15,-31); c.fill();
+  c.fillStyle="#111"; c.beginPath(); c.arc(11,-36,1.5,0,7); c.fill();
   c.restore();
-  c.fillStyle=BAM(40,.55,14);
-  for(let i=0;i<4;i++){ c.beginPath(); c.ellipse(1,-12+i*7,4.5,1.3,-.2,0,7); c.fill(); }
-  c.strokeStyle=W; c.lineWidth=1.6;
-  c.beginPath(); c.moveTo(10,6); c.lineTo(16,8); c.moveTo(10,14); c.lineTo(16,16); c.stroke();
+  c.fillStyle=Wt; for(let i=0;i<4;i++){ c.beginPath(); c.ellipse(1,-12+i*7,4.5,1.3,-.2,0,7); c.fill(); }
+  c.strokeStyle=K; c.lineWidth=1.6; c.beginPath(); c.moveTo(10,6); c.lineTo(16,8); c.moveTo(10,14); c.lineTo(16,16); c.stroke();
   c.restore();
 }
 /* 竹鞭：从 x0（中间那根竹的根）沿地面往外长到 xT；xFull 是满音量能长到的地方。
@@ -885,13 +857,80 @@ function drawRhizome(c, x0, xT, xFull, y, k, on){
     c.fillStyle=BAM(80,.7,10); c.fillRect(nx-0.8*k,y-3*k,1.6*k,6*k); }
   if(on){
     for(let q=0;q<3;q++){ const hh=(24-q*6)*k, ww=(9-q*2.2)*k, oy=-q*5*k;
-      c.fillStyle = `rgba(242,239,230,${q===2?.95:.55+q*.18})`;
+      c.fillStyle = `rgba(70,98,31,${q===2?.95:.55+q*.18})`;
       c.beginPath(); c.moveTo(xT-ww/2, y+oy+1*k);
       c.quadraticCurveTo(xT-ww*0.3, y+oy-hh*0.6, xT+dir*3*k, y+oy-hh);
       c.quadraticCurveTo(xT+ww*0.35, y+oy-hh*0.5, xT+ww/2, y+oy+1*k); c.fill(); }
   }
 }
 /* 枝条：根粗梢细；sagX 处轻沉 sag（鸟落下）。线的高度不变，只在鸟脚下局部下沉。 */
+
+/* ── v52：左手音色盘做成一颗水珠。握拳时从盘心凝出、鼓起来；推向哪个字，那一侧被照亮；
+   松手时缩小落下。水珠＝贴在画面上的凸透镜：正下方的画面被正着放大一点、磨砂、提亮，
+   所以底下透得出来但不抢字；高光在光源侧（右上，和树冠光束同向），字画在高光下面，像附着在表面。 */
+const LIGHT = { x:0.55, y:-0.83 };          // 光从右上来（和树冠的光束同向）
+let DROP_OC = null;
+function easeOutBack(u){ const c1=1.4, c3=c1+1; return 1 + c3*Math.pow(u-1,3) + c1*Math.pow(u-1,2); }
+/* 水珠本体：贴在画面上的凸透镜 —— 正下方的东西被正着放大一点、磨砂、提亮 */
+function drawDropBody(c, x, y, r, k, glowAng=null){
+  if(r < 2) return;
+  const W = Math.ceil(r*2), mag = 1.16;
+  /* 拿不到离屏画布（老浏览器、测试桩）就不做放大，只剩乳白那层 —— 和竹竿的缓存同一个做法 */
+  let lens = false;
+  try{
+    if(!DROP_OC) DROP_OC = document.createElement("canvas");
+    if(DROP_OC.width !== W){ DROP_OC.width = W; DROP_OC.height = W; }
+    const o = DROP_OC.getContext("2d"); o.clearRect(0,0,W,W);
+    const sw = W/mag; o.filter = `blur(${1.6*k}px)`;
+    o.drawImage(c.canvas, x - sw/2, y - sw/2, sw, sw, 0, 0, W, W); o.filter = "none"; lens = true;
+  }catch(e){ lens = false; }
+  /* 落影：光从右上来，影子落在左下 */
+  c.save(); c.shadowColor = "rgba(28,43,32,.22)"; c.shadowBlur = 18*k;
+  c.shadowOffsetX = -LIGHT.x*7*k; c.shadowOffsetY = -LIGHT.y*7*k;
+  c.fillStyle = "rgba(236,242,228,.01)"; c.beginPath(); c.arc(x, y, r, 0, 7); c.fill(); c.restore();
+  c.save(); c.beginPath(); c.arc(x, y, r, 0, 7); c.clip();
+  if(lens) c.drawImage(DROP_OC, x - r, y - r, W, W);
+  /* 水本身：乳白一层，中间亮边缘略暗 —— 有厚度 */
+  let g = c.createRadialGradient(x + LIGHT.x*r*0.25, y + LIGHT.y*r*0.25, r*0.1, x, y, r);
+  g.addColorStop(0, "rgba(246,250,240,.62)"); g.addColorStop(.75, "rgba(232,240,224,.50)"); g.addColorStop(1, "rgba(150,175,130,.55)");
+  c.fillStyle = g; c.fillRect(x-r, y-r, 2*r, 2*r);
+  /* 背光那一侧（左下）边缘再压暗一点 */
+  g = c.createRadialGradient(x + LIGHT.x*r*0.5, y + LIGHT.y*r*0.5, r*0.6, x + LIGHT.x*r*0.5, y + LIGHT.y*r*0.5, r*1.55);
+  g.addColorStop(0, "rgba(28,43,32,0)"); g.addColorStop(1, "rgba(28,43,32,.22)");
+  c.fillStyle = g; c.fillRect(x-r, y-r, 2*r, 2*r);
+  if(glowAng !== null){
+    const gx = x + Math.cos(glowAng)*r*0.62, gy = y + Math.sin(glowAng)*r*0.62;
+    g = c.createRadialGradient(gx, gy, 0, gx, gy, r*0.5);
+    g.addColorStop(0, "rgba(255,246,214,.8)"); g.addColorStop(1, "rgba(255,246,214,0)");
+    c.fillStyle = g; c.fillRect(x-r, y-r, 2*r, 2*r);
+  }
+  c.restore();
+}
+/* 水珠表面：高光（光源那侧）+ 焦散（光穿过水珠聚到对侧底部）+ 一圈细边 */
+function drawDropGloss(c, x, y, r, k, glowAng){
+  if(r < 2) return;
+  c.save();
+  c.beginPath(); c.arc(x, y, r, 0, 7); c.clip();
+  /* 焦散：对侧的一弯亮光 */
+  let g = c.createRadialGradient(x - LIGHT.x*r*0.62, y - LIGHT.y*r*0.62, 0, x - LIGHT.x*r*0.62, y - LIGHT.y*r*0.62, r*0.55);
+  g.addColorStop(0, "rgba(255,250,222,.55)"); g.addColorStop(1, "rgba(255,250,222,0)");
+  c.fillStyle = g; c.fillRect(x-r, y-r, 2*r, 2*r);
+  c.restore();
+  /* 高光：一大片柔的 + 一个硬的小点 */
+  c.save();
+  const hx = x + LIGHT.x*r*0.52, hy = y + LIGHT.y*r*0.52;
+  c.translate(hx, hy); c.rotate(Math.atan2(LIGHT.y, LIGHT.x) + Math.PI/2);
+  g = c.createRadialGradient(0, 0, 0, 0, 0, r*0.36);
+  g.addColorStop(0, "rgba(255,255,255,.85)"); g.addColorStop(1, "rgba(255,255,255,0)");
+  c.fillStyle = g; c.beginPath(); c.ellipse(0, 0, r*0.36, r*0.18, 0, 0, 7); c.fill();
+  c.fillStyle = "rgba(255,255,255,.95)"; c.beginPath(); c.ellipse(r*0.04, -r*0.02, r*0.07, r*0.035, 0, 0, 7); c.fill();
+  c.restore();
+  c.strokeStyle = "rgba(255,255,255,.55)"; c.lineWidth = 1.2*k;
+  c.beginPath(); c.arc(x, y, r - 0.6*k, Math.atan2(LIGHT.y,LIGHT.x) - 1.1, Math.atan2(LIGHT.y,LIGHT.x) + 1.1); c.stroke();
+  c.strokeStyle = "rgba(28,43,32,.28)"; c.lineWidth = 1*k;
+  c.beginPath(); c.arc(x, y, r, Math.atan2(LIGHT.y,LIGHT.x) + 1.8, Math.atan2(LIGHT.y,LIGHT.x) + 4.5); c.stroke();
+}
+
 function drawBranch(c, x0, x1, y, w0, w1, fill, sagX, sag){
   const N=48, sw=Math.max(40, (x1-x0)*0.10);
   const dy = t => sag ? sag*Math.exp(-Math.pow((x0+(x1-x0)*t - sagX)/sw,2)) : 0;
@@ -903,40 +942,31 @@ function drawBranch(c, x0, x1, y, w0, w1, fill, sagX, sag){
 /* 鸟：右手。open 0＝收翅（捏上了、落在枝上），1＝全展开（手放松张开）。
    翅膀张开的程度就是「离捏上还差多少」—— 原来那条拇指–食指虚线的读数，换成了鸟的姿态。 */
 function drawBird(c, bx, by, s, open, perched, a, t){
-  c.save(); c.translate(bx,by); c.scale(s,s);
-  const W = `rgba(242,239,230,${a})`;
-  c.fillStyle=W;
-  /* 翅膀：两片杏叶形，从肩部长出。open＝1 举到上后方，open→0 收平贴在背上。
-     后面那片淡一点，前后叠出层次；张开时轻轻扇。 */
+  /* 暗绿绣眼鸟：橄榄绿背、明黄喉、白眼圈 */
+  c.save(); c.translate(bx,by); c.scale(s,s); c.globalAlpha = a;
+  const BACK="#46621F", WINGC="#3A5419", THROAT="#F2C94C", BELLY="#EEF0E2";
   const wing = (ang, len, alpha) => {
-    c.save(); c.translate(-6,-26); c.rotate(ang); c.globalAlpha = alpha;
-    c.beginPath(); c.moveTo(0,0);
-    c.quadraticCurveTo(len*0.45,-len*0.30, len,0);
-    c.quadraticCurveTo(len*0.55, len*0.10, 0,0);
-    c.fill(); c.restore();
-  };
-  if(open > 0.02){
-    const flap = Math.sin(t*0.012)*0.22*open;
-    const base = Math.PI*(1 + 0.30*open);          // 画布里 π＝朝后；再往上转＝举起
-    wing(base + 0.28*open + flap, 46, 0.55);       // 后面那片举得更高、淡一点
-    wing(base - flap*0.6,          52, 1);
-  }
-  /* 身体、头、喙 */
-  c.beginPath();
+    c.save(); c.translate(-6,-26); c.rotate(ang); c.globalAlpha = a*alpha; c.fillStyle=WINGC;
+    c.beginPath(); c.moveTo(0,0); c.quadraticCurveTo(len*0.45,-len*0.30, len,0); c.quadraticCurveTo(len*0.55, len*0.10, 0,0);
+    c.fill(); c.restore(); };
+  if(open > 0.02){ const flap = Math.sin(t*0.012)*0.22*open, base = Math.PI*(1 + 0.30*open);
+    wing(base + 0.28*open + flap, 46, 0.7); }
+  c.fillStyle=BACK; c.beginPath();
   c.moveTo(-34,-14); c.bezierCurveTo(-30,-40,6,-46,18,-30);
   c.bezierCurveTo(30,-16,22,-2,4,0); c.lineTo(-40,6); c.lineTo(-58,14); c.lineTo(-44,0);
   c.bezierCurveTo(-40,-4,-37,-8,-34,-14); c.fill();
-  c.beginPath(); c.arc(14,-36,13,0,7); c.fill();
-  c.beginPath(); c.moveTo(25,-38); c.lineTo(36,-34); c.lineTo(25,-31); c.fill();
-  c.fillStyle=BAM(12,1,16); c.beginPath(); c.arc(17,-38,2.2,0,7); c.fill();
-  if(open <= 0.02){            // 收着的翅线
-    c.strokeStyle=BAM(70,.45,10); c.lineWidth=1.6;
-    c.beginPath(); c.moveTo(-20,-26); c.quadraticCurveTo(-2,-22,6,-8); c.stroke();
-  }
-  if(perched){                 // 脚抓在枝上
-    c.strokeStyle=W; c.lineWidth=2;
-    c.beginPath(); c.moveTo(-2,0); c.lineTo(-4,6); c.moveTo(6,-1); c.lineTo(6,6); c.stroke();
-  }
+  /* 腹：浅；喉：黄 */
+  c.save(); c.clip(); c.fillStyle=BELLY; c.beginPath(); c.ellipse(4,-4,30,14,-0.15,0,7); c.fill();
+  c.fillStyle=THROAT; c.beginPath(); c.ellipse(16,-18,13,12,0.2,0,7); c.fill(); c.restore();
+  c.fillStyle=BACK; c.beginPath(); c.arc(14,-36,13,0,7); c.fill();
+  c.fillStyle=THROAT; c.beginPath(); c.arc(19,-28,6.5,0,7); c.fill();
+  c.fillStyle="#3B3A33"; c.beginPath(); c.moveTo(25,-38); c.lineTo(36,-34); c.lineTo(25,-31); c.fill();
+  c.fillStyle="#FFFFFF"; c.beginPath(); c.arc(17,-38,4.4,0,7); c.fill();
+  c.fillStyle="#1E241B"; c.beginPath(); c.arc(17,-38,2.3,0,7); c.fill();
+  if(open > 0.02){ const flap = Math.sin(t*0.012)*0.22*open, base = Math.PI*(1 + 0.30*open); wing(base - flap*0.6, 52, 1); }
+  else { c.strokeStyle="#3F5A1E"; c.lineWidth=1.6; c.beginPath(); c.moveTo(-20,-26); c.quadraticCurveTo(-2,-22,6,-8); c.stroke(); }
+  if(perched){ c.strokeStyle="#4A4A40"; c.lineWidth=2;
+    c.beginPath(); c.moveTo(-2,0); c.lineTo(-4,6); c.moveTo(6,-1); c.lineTo(6,6); c.stroke(); }
   c.restore();
 }
 /* ── 引导（v39）。不弹说明页，提示出现在手要动的地方，一次一条，做到一次就过。
@@ -2020,7 +2050,7 @@ function draw(){
     drawCulm(ctx, cxL, vaultY(cxL, cv.width, k) - 10*k, GROUND + 4*k, cwL);
     /* 0 档到当前档那一段提亮（活的） */
     if(S.deck > 0){
-      ctx.fillStyle = INK(0.30 + S.deckFlash*0.25);
+      ctx.fillStyle = `rgba(70,98,31,${0.50 + S.deckFlash*0.3})`;
       ctx.fillRect(cxL - cwL/2, yRow(S.deck), cwL, yRow(0) - yRow(S.deck));
     }
     /* 横枝：每一档从竹节伸出一根细枝到台子右沿，在响的那几档亮一点 */
@@ -2347,6 +2377,10 @@ function draw(){
   S.menuFlash = Math.max(0, S.menuFlash - fdt*2.2);
   /* 没握拳的时候，盘跟着手走（淡），告诉你「握下去就是在这里展开」。
      握拳之后盘定住不动，手再移动就是在选 —— 盘动不动，直接区分了两种状态。 */
+  { const tnow = performance.now();
+    if(S.menu && !S._pm) S.menuT = tnow;
+    if(!S.menu && S._pm && S._pa) S.dropFall = { x:S._pa.x, y:S._pa.y, r:S._pa.r, t:tnow };
+    S._pm = S.menu; }
   const ghost = !S.menu && S.left && (performance.now()-S.lT) < 120
                 && S.left.x < DECK_X1 && S.left.y >= CARD_TOP;
   if(S.menu && S.anchor || ghost){
@@ -2365,6 +2399,23 @@ function draw(){
        中间留出死区不画线 —— 线从死区边上开始，等于告诉你「推出这一截才算选」。
        中心一个小点：越接近握拳线越亮，「差一点就握上了」看得见。 */
     ctx.lineCap="round";
+    /* v51：盘下面垫一块浮起来的圆片，把盘从画布里提出来 —— 不垫的话，
+       叶片、字和下面的档位线、乐器名、竹枝混成一片。
+       握拳后才垫（正在用）；跟手时只给字垫一小块。 */
+    const grow = S.menu ? easeOutBack(Math.min(1, (performance.now() - (S.menuT||0))/340)) : 0;
+    if(S.menu){
+      const pr = rOut*1.05*grow;
+      S._pa = { x:ax, y:ay, r:pr };
+      drawDropBody(ctx, ax, ay, pr, k, act >= 0 ? Math.atan2([[0,-1],[1,0],[0,1],[-1,0]][act][1], [[0,-1],[1,0],[0,1],[-1,0]][act][0]) : null);
+    } else {
+      /* 跟手时不垫大圆片：手在左区的大部分时间都是这个状态，大圆片会一直盖住乐器。
+         只给中间那行字垫一块小底，让它从乐器名里分出来。 */
+      ctx.font=`${FS.xs*k}px -apple-system,"PingFang SC","Noto Sans CJK SC","Noto Sans CJK TC",sans-serif`;
+      const tw = ctx.measureText("握拳打开").width + 14*k, th = 18*k;
+      ctx.save(); ctx.shadowColor = "rgba(28,43,32,.12)"; ctx.shadowBlur = 6*k;
+      ctx.fillStyle = "rgba(236,242,228,.85)";
+      ctx.beginPath(); ctx.roundRect(ax - tw/2, ay + 14*k - th/2, tw, th, th/2); ctx.fill(); ctx.restore();
+    }
     ctx.fillStyle = S.menu ? LIVE() : SCL(0.9 + near*0.25);
     ctx.beginPath(); ctx.arc(ax, ay, (2.5 + near*2)*k, 0, 7); ctx.fill();
     const ARM = [[0,-1],[1,0],[0,1],[-1,0]];
@@ -2385,7 +2436,9 @@ function draw(){
       ctx.textAlign="center"; ctx.textBaseline="middle";
       ctx.font=`${(on?FS.m:FS.s)*k}px -apple-system,"PingFang SC","Noto Sans CJK SC","Noto Sans CJK TC",sans-serif`;
       ctx.fillStyle = on ? LIVE(1.15) : LIVE(0.9);
-      ctx.fillText(it.label, px, py);
+      ctx.save(); ctx.translate(px, py); ctx.globalAlpha = Math.min(1, grow);
+      if(o[0]) ctx.scale(0.82, 1); else ctx.scale(1, 0.84);          // 球面透视：朝外的方向被压扁
+      ctx.fillText(it.label, 0, 0); ctx.restore();
       if(on){
         const w2 = ctx.measureText(it.label).width/2 + 8*k;
         ctx.strokeStyle=WILL(); ctx.lineWidth=2*k;
@@ -2403,12 +2456,21 @@ function draw(){
     ctx.textAlign="center"; ctx.textBaseline="middle";
     ctx.font=`${FS.xs*k}px -apple-system,"PingFang SC","Noto Sans CJK SC","Noto Sans CJK TC",sans-serif`;
     ctx.fillStyle = S.menu ? LIVE() : SCL();
-    ctx.fillText(!S.menu ? "握拳打开" : "音色", ax, ay);
+    /* v51：字放在中心点下方，不再压在点上 */
+    ctx.fillText(!S.menu ? "握拳打开" : "音色", ax, ay + 14*k);
+    if(S.menu) drawDropGloss(ctx, ax, ay, rOut*1.05*grow, k, act >= 0 ? Math.atan2(OFF[act][1], OFF[act][0]) : null);
+    else { drawDropBody(ctx, ax, ay, 9*k, k); drawDropGloss(ctx, ax, ay, 9*k, k, null); }   // 跟手：一颗小露珠
     /* 握拳的实时读数在状态栏里，这儿不重复画 —— 盘上只留必要的 */
     /* 原来这里有一条「右手不在，听不到」。加了试听之后，
        推到哪个方向就响哪个音色，不需要这条提示了。 */
   }
 
+  if(S.dropFall){
+    const u = (performance.now() - S.dropFall.t)/520;
+    if(u >= 1) S.dropFall = null;
+    else { const r = S.dropFall.r*(1 - 0.75*u), y = S.dropFall.y + 260*k*u*u;
+      ctx.save(); ctx.globalAlpha = 1 - u*u; drawDropBody(ctx, S.dropFall.x, y, r, k); drawDropGloss(ctx, S.dropFall.x, y, r, k, null); ctx.restore(); }
+  }
   /* 手 —— 上一版整段替换音高刻度时把这两行删掉了，所以屏幕上看不到手 */
   /* 手＝活的。线描内部再乘 0.5–0.8，所以基准要高 */
   /* 引导第一步：右手还没来时，枝上一只淡淡的鸟影，告诉你它会落在哪儿 */
@@ -2596,7 +2658,7 @@ function recCompose(){
     const k = DPR, w = W*0.16, h = w*video.videoHeight/video.videoWidth, x = W - w - 16*k, y = 16*k, r = 8*k;
     c.save(); c.beginPath(); c.roundRect ? c.roundRect(x, y, w, h, r) : c.rect(x, y, w, h); c.clip();
     c.translate(x + w, y); c.scale(-1, 1); c.drawImage(video, 0, 0, w, h); c.restore();
-    c.save(); c.strokeStyle = "rgba(228,224,216,.25)"; c.lineWidth = 1*k; c.beginPath();
+    c.save(); c.strokeStyle = "rgba(28,43,32,.35)"; c.lineWidth = 1*k; c.beginPath();
     c.roundRect ? c.roundRect(x, y, w, h, r) : c.rect(x, y, w, h); c.stroke(); c.restore();
   }
 }
