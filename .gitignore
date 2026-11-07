@@ -13,3 +13,6 @@ __pycache__/
 *.pyc
 
 # 这个脚本会把令牌写进 .github-publish/，脚本本身没有秘密，可以进仓库
+
+# 手指测试的原始数据：逐帧手部坐标，个人数据，只留本地
+finger-test_*.json

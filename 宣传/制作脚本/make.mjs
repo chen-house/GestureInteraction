@@ -127,7 +127,7 @@ for(let k0 = 0; k0 < NF; k0 += 20){
       const realNow = performance.now; performance.now = () => vnow;
       try { g.draw(); } finally { performance.now = realNow; }
       if(label){ const c = cv.getContext('2d'), kk = cv.height/1080; c.save(); c.textAlign='right'; c.textBaseline='middle';
-        c.font = `${13*kk}px -apple-system,"Noto Sans CJK SC",sans-serif`; c.fillStyle = 'rgba(226,236,228,0.38)';
+        c.font = `${13*kk}px -apple-system,"Noto Sans CJK SC",sans-serif`; c.fillStyle = 'rgba(28,43,32,0.45)';   // v50 起是浅底，标签用深字
         c.fillText(label, cv.width - 28*kk, cv.height - 22*kk); c.restore(); }
       outv.push(cv.toDataURL('image/jpeg', 0.9));
     }

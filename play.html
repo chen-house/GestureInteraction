@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>手势乐器 v52</title>
+<title>手势乐器 v63</title>
 <style>
   :root{ --ink:#24382a; --paper:#B4C99C; --line:rgba(28,43,32,.22); --dim:#55644f;
          --hot:#9A4A18; --bar:62px;
@@ -142,7 +142,7 @@
 <div id="gi-tab"><span>‹</span><span>设</span><span>置</span></div>
 
 <div id="gi-side">
-  <h2>手势乐器 <span style="opacity:.35;font-weight:400">v52</span></h2>
+  <h2>手势乐器 <span style="opacity:.35;font-weight:400">v63</span></h2>
   <div>
     <div class="lab"><span>滑音</span><span id="gi-glideval">30 ms</span></div>
     <input id="gi-glide" type="range" min="0" max="400" step="10" value="30">
@@ -167,8 +167,10 @@
     <div class="lab"><span>发音方式</span><span></span></div>
     <select id="gi-gate" style="width:100%;font:inherit;background:none;border:1px solid var(--line);
       border-radius:2px;padding:3px 4px;color:inherit;margin-top:3px">
+      <option value="follow">跟谱 · 捏一下弹下一个音（G 键）</option>
       <option value="pinch" selected>捏合出声 · 能弹 3 3</option>
       <option value="open">常开 · 手在就响（老办法）</option>
+      <option value="finger">指法 · 四指 × 三把位（F 键）</option>
     </select>
   </div>
   <div>
@@ -192,8 +194,20 @@
       <option value="2">欢乐颂</option>
       <option value="3">茉莉花</option>
       <option value="4" selected>La Cucaracha</option>
+      <option value="5">自定义…（自己贴简谱）</option>
       <option value="-1">不显示</option>
     </select>
+    <!-- v53：自定义谱子。只存在这个浏览器里，不上传、不进仓库。 -->
+    <div id="gi-custom" style="display:none;margin-top:8px">
+      <input id="gi-cname" placeholder="曲名（可不填）" style="width:100%;font:inherit;background:rgba(255,255,255,.35);border:1px solid var(--line);border-radius:2px;padding:3px 5px;color:inherit">
+      <textarea id="gi-ctext" rows="5" spellcheck="false" placeholder="贴简谱，例如：&#10;3 3 4 5 | 5 4 3 2 | 1 1 2 3 | 3 - 2 -&#10;高音 1'　低音 5,　附点 3.　八分 3_　十六分 3__　休止 0　延长 -　小节线 |"
+        style="width:100%;margin-top:6px;font:12px/1.6 ui-monospace,Menlo,monospace;background:rgba(255,255,255,.35);border:1px solid var(--line);border-radius:2px;padding:4px 5px;color:inherit;resize:vertical"></textarea>
+      <label style="display:flex;justify-content:space-between;cursor:pointer;opacity:.7;margin-top:4px">
+        <span>超出音域的音折回这个八度</span>
+        <input id="gi-cfold" type="checkbox" checked style="accent-color:#46621F">
+      </label>
+      <div id="gi-cmsg" class="note" style="margin-top:4px"></div>
+    </div>
   </div>
   <div>
     <div class="lab"><span>节奏密度</span><span></span></div>
@@ -1058,6 +1072,49 @@ const OSC2_LEVEL = 0.35;   // 第二振荡器相对第一个的音量           
 /* 收音分两段。一刀切（单段 80ms）听上去是「掐断」不是「收住」：
    先快降到三成（这一段是断句的手感），再拖一条尾巴收干净。 */
 const REL_DROP = 0.30, REL_FAST = 0.010, REL_HOLD = 0.030, REL_TAIL = 0.060;
+/* ── v56：指法模式 ─────────────────────────
+   实测（手指测试，2026-11-04，一人一次）：拇指捏四根指尖认得最准 —— 捏住时离目标指尖
+   0.08–0.15 个掌长，离最近的别的指尖 0.47–0.87；「点指尖还是中节」只有 70%，「数手指」换手势时乱。
+   v57：三个互相重叠的把位（v56 是两个不重叠的，旋律在 4、5、6 一带转的时候来回换把 ——
+   拿一行实际的谱算过：两把位要换 7 次，三把位重叠 3 次，等于理论最少）：
+     掌心在下段 → 食 中 无 小 ＝ 1 2 3 4
+     掌心在中段 → 食 中 无 小 ＝ 3 4 5 6
+     掌心在上段 → 食 中 无 小 ＝ 5 6 7 1'
+   分段线在半音 4.5 和 8（两相邻把位中心的中点），带 ±0.75 半音回差。
+   跳进只换手指不挪手；跨出当前把位才挪一次。
+   认手指的规矩：最近的指尖要比第二近的近得多（< 0.6 倍）才算认清 ——
+   无名指和小指挨着，实测里互相认错过，这道门专门压它。
+   把位只在不出声的时候换：捏着的时候手漂一点，音不会跟着跳。 */
+const FINGER_TIPS = [8,12,16,20], FINGER_NAMES = ["食","中","无","小"];
+const FINGER_SEMI = [[0,2,4,5],[4,5,7,9],[7,9,11,12]], FINGER_SEP = 0.6;
+/* v61：把位按掌心在摄像头画面里的高度分，只用画面中间那一段（0.40–0.80），三等分。
+   原来沿用音高场（0.26–0.86）：上段把位要求掌心在 0.26–0.42 —— 实测掌心到最高指尖约占画面 0.26，
+   掌心一到 0.38 指尖就只剩 0.12，再往上指尖出画，识别丢手（鸟消失）、指尖乱跳（一排音连着响）。
+   0.40 时指尖还在 0.14 左右；测试里手自然待的高度是 0.51–0.72，正好落在中间。
+   把位坐标 u：0＝最下，3＝最上；分段线 u＝1、2，回差 0.12；出声中越过分界 0.4 才算有意换把。 */
+const FINGER_Y = [0.40, 0.80], FINGER_HYS = 0.12, FINGER_SHIFT = 0.4;
+const fingerU = y => (FINGER_Y[1] - y) / (FINGER_Y[1] - FINGER_Y[0]) * 3;
+function fingerPos(u, p){        /* u＝把位坐标（0–3），p＝当前把位；带回差 */
+  if(p === undefined || p === null) return u < 1 ? 0 : u < 2 ? 1 : 2;
+  while(p < 2 && u > p + 1 + FINGER_HYS) p++;
+  while(p > 0 && u < p - FINGER_HYS) p--;
+  return p;
+}
+/* v59：指法模式自己的出声门槛。原来借用捏合模式的 0.55 / 0.72、一帧就出声 ——
+   挪把位时手是半张的、还在动，拇指扫过某根指尖附近一帧，就响了。
+   实测（手指测试数据）：真捏住时拇指离指尖中位 0.14、95% 在 0.24 以内；五指张开最近也有 0.88。
+   所以门槛收到 0.30（漏掉率 3.3% → 3.8%），还要连续两帧、并且认清是哪根手指才出声。 */
+const FINGER_ON = 0.30, FINGER_OFF = 0.40, FINGER_FRAMES_ON = 2;
+function fingerPick(lm){
+  const p = Math.hypot(lm[9].x-lm[0].x, lm[9].y-lm[0].y) || 1e-6;
+  const ds = FINGER_TIPS.map(i => Math.hypot(lm[4].x-lm[i].x, lm[4].y-lm[i].y)/p);
+  let k = 0; for(let i=1;i<4;i++) if(ds[i] < ds[k]) k = i;
+  const d2 = Math.min(...ds.filter((_,i)=>i!==k));
+  /* v61：拇指或任何指尖贴到画面边上（快出画了），这一帧的指尖位置不可信，不算认清 */
+  const edge = [4,8,12,16,20].some(i => lm[i].y < 0.03 || lm[i].y > 0.97 || lm[i].x < 0.02 || lm[i].x > 0.98);
+  return { k, d1:ds[k], d2, clear: ds[k] < FINGER_SEP*d2 && !edge, edge };
+}
+const fingerNote = (k, pos) => MIDI_LO + FINGER_SEMI[pos][k];
 function pinchOf(lm){
   const plen = Math.hypot(lm[9].x-lm[0].x, lm[9].y-lm[0].y) || 1e-6;
   return Math.hypot(lm[4].x-lm[8].x, lm[4].y-lm[8].y)/plen;
@@ -1125,6 +1182,83 @@ const TUNES = [
   { name:"La Cucaracha", note:"传统民歌，公有领域；降两个半音，只收前半段",
     jp:"1 1 1 4 - 6 | 1 1 1 4 - 6 - | 4 4 3 3 2 2 | 1 - - - | 1 1 1 4 - 6 | 1 1 1 4 - 6 - | 4 4 3 3 2 2 | 1 - - -" }
 ];
+/* v53：自定义谱子。玩家自己贴简谱，只存在这个浏览器里（localStorage），不上传。
+   能认：1–7、0（休止）、-（延长）、|（小节线）、'（高八度，可叠）、,（低八度，可叠）、#/b（升降）。
+   v54：时值也认 —— 音后的 . 或 ·＝附点（简谱的惯例；低八度只用 ,），_＝减时线（八分），__＝两条（十六分）。
+   时值只用来显示（画成点和下划线），弹的时候长短仍由手决定。
+   全角符号先换成半角；数字连写（1231）也拆得开。
+   这把琴只有一个八度（C4–C5）：低八度的音、以及 1' 以上的音弹不到 ——
+   「折回」打开时把它们挪回这个八度（音名不变，只是高度变），关掉时原样显示、画成淡的。
+   升降号：音阶吸附只有白键，带 #/b 的音照样显示，但弹的时候会吸到相邻的白键。
+   没写小节线的，每 8 个音自动断一行，只为排版。 */
+const CUSTOM_KEY = "gi-custom-tune";
+TUNES.push({ name:"自定义", note:"还没输入 —— 在右侧栏贴简谱", jp:"", custom:true });
+function parseJianpu(text, fold){
+  const t = String(text||"").replace(/[｜]/g,"|").replace(/[’‘＇`´]/g,"'").replace(/[，、]/g,",")
+                            .replace(/[－—–]/g,"-").replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0)-0xFEE0));
+  const re = /([#b♯♭]?)([0-7])([',]*)([.·_]*)|(-)|(\|)|(\s+)|(.)/g;
+  const bars = [[]], bad = new Set(); let notes = 0, out = 0, acc = 0, m;
+  while((m = re.exec(t))){
+    if(m[2] !== undefined){
+      const d = m[2], mods = m[3]||"", hi = (mods.match(/'/g)||[]).length, lo = (mods.match(/,/g)||[]).length, oc = hi - lo;
+      const dur = m[4]||"", dot = /[.·]/.test(dur) ? "·" : "", ul = "_".repeat(Math.min(2,(dur.match(/_/g)||[]).length));
+      let tok = (m[1] ? m[1].replace("♯","#").replace("♭","b") : "") + d;
+      if(d !== "0"){
+        notes++; if(m[1]) acc++;
+        const ok = oc === 0 || (oc === 1 && d === "1" && !m[1]);
+        if(oc === 1 && d === "1" && !m[1]) tok = "1'";
+        else if(!ok){ out++; tok = fold ? tok : tok + (oc > 0 ? "'".repeat(oc) : ",".repeat(-oc)); }
+      }
+      bars[bars.length-1].push(tok + dot + ul);
+    } else if(m[5]) bars[bars.length-1].push("-");
+    else if(m[6]){ if(bars[bars.length-1].length) bars.push([]); }
+    else if(m[8]) bad.add(m[8]);
+  }
+  let B = bars.filter(b => b.length);
+  if(B.length === 1 && B[0].length > 8){ const one = B[0]; B = []; for(let i=0;i<one.length;i+=8) B.push(one.slice(i,i+8)); }
+  return { jp: B.map(b => b.join(" ")).join(" | "), bars:B.length, notes, out, acc, bad:[...bad] };
+}
+function customApply(save){
+  const name = ($("cname") && $("cname").value || "").trim(), text = $("ctext") ? $("ctext").value : "", fold = $("cfold") ? $("cfold").checked : true;
+  const r = parseJianpu(text, fold), T = TUNES[5];
+  T.name = name || "自定义"; T.jp = r.jp;
+  T.note = r.notes ? "只存在这个浏览器里" : "还没输入 —— 在右侧栏贴简谱";
+  const msg = [];
+  if(r.notes) msg.push(`认出 ${r.bars} 小节、${r.notes} 个音`);
+  if(r.out) msg.push(fold ? `${r.out} 个音超出 C4–C5，已折回这个八度` : `${r.out} 个音超出 C4–C5，弹不到（画成淡的）`);
+  if(r.acc) msg.push(`${r.acc} 个升降音：只有白键，弹的时候会吸到相邻的白键`);
+  if(r.bad.length) msg.push(`没认出：${r.bad.slice(0,8).join(" ")}`);
+  const el = $("cmsg"); if(el) el.textContent = msg.join("；");
+  S.scorePage = 0;
+  /* v55：下拉框里那一项直接显示曲名，一眼看得出存的是哪首 */
+  const opt = document.querySelector && document.querySelector('#gi-tune option[value="5"]');
+  if(opt) opt.textContent = r.notes ? "自定义：" + (name || "未命名") : "自定义…（自己贴简谱）";
+  if(save){
+    let okSave = false;
+    try{ localStorage.setItem(CUSTOM_KEY, JSON.stringify({ name, text, fold })); okSave = true; }catch(e){}
+    const d = new Date(), hm = String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0");
+    if(el) el.textContent = (msg.length ? msg.join("；") + "。" : "") + (okSave ? `已存进这个浏览器（${hm}）` : "这个浏览器不让存（无痕窗口？），刷新会丢");
+  }
+}
+
+/* ── v62：跟谱模式 ─────────────────────────
+   照 Smule Magic Piano 的做法：音高由谱子给，人只管「什么时候响、响多大」。
+   每捏一下（拇指捏食指 —— 实测四种手指里最稳的，认对 100%）就弹谱上的下一个音；
+   节奏、长短（捏住＝长音）、音量（左右）都是你的。错音不可能出现，所以一首歌能一口气弹完。
+   谱子里的升降号、高低八度都照弹（音高是机器给的，不受一个八度、只有白键的限制）。 */
+function tuneSeq(){
+  const T = TUNES[S.tune]; if(!T || !T.jp) return [];
+  const key = S.tune + "|" + T.jp; if(S._seqKey === key) return S._seq;
+  const out = [];
+  for(const tk of T.jp.split(/[\s|]+/)){
+    const m = tk.match(/^([#b]?)([1-7])([',]*)/); if(!m) continue;
+    const oc = (m[3].match(/'/g)||[]).length - (m[3].match(/,/g)||[]).length;
+    out.push(MIDI_LO + JP_SEMI[m[2]] + 12*oc + (m[1]==="#" ? 1 : m[1]==="b" ? -1 : 0));
+  }
+  S._seqKey = key; S._seq = out; S.fIdx = 0;
+  return out;
+}
+
 /* 简谱数字 ↔ C 大调音级（半音偏移） */
 const JP_SEMI = { "1":0, "2":2, "3":4, "4":5, "5":7, "6":9, "7":11 };
 const SEMI_JP = { 0:"1", 2:"2", 4:"3", 5:"4", 7:"5", 9:"6", 11:"7" };
@@ -1504,38 +1638,38 @@ function stopCam(){
 async function boot(){
   S.lib = "载入中"; S.bootT = performance.now();
   const fails=[];
-  let FR=null, HL=null, fs=null, libName="";
-  for(const lib of LIBS){
-    try{
-      S.loadStep = "取识别库 " + (lib.startsWith("./") ? "本地 lib/" : shortUrl(lib));
-      ({FilesetResolver:FR, HandLandmarker:HL} =
-        await withTimeout(import(lib+"/vision_bundle.mjs"), LOAD_TIMEOUT, "识别库 "+shortUrl(lib)));
-      fs = await withTimeout(FR.forVisionTasks(lib+"/wasm"), LOAD_TIMEOUT, "wasm "+shortUrl(lib));
-      libName = lib.startsWith("./") ? "本地" : lib.split("@").pop();
-      break;
-    }catch(e){
-      fails.push("识别库 " + (lib.startsWith("./")?"本地 lib/":shortUrl(lib)) + " → " + e.message);
-      FR = HL = fs = null;
-    }
-  }
-  if(!fs) throw new Error("识别库没加载上：\n"+fails.join("\n"));
-
+  let libName="";
+  /* v58：wasm 是在「装配识别器」那一步才真正去下载的，不是在 forVisionTasks。
+     原来装配写在换库循环外面 —— 本地 wasm 一旦下载失败（报 "both async and sync fetching
+     of the wasm failed"），就直接报错，不会去试下一个来源。现在装配也放进循环：
+     本地失败先原地重试一次（多半是一时没拿到），再换 CDN。 */
   const buf = await loadModelBuffer(fails);
-  S.loadStep = "装配识别器";
-  const base = buf ? { modelAssetBuffer: buf, delegate:"GPU" }
-                   : { modelAssetPath: MODELS[MODELS.length-1], delegate:"GPU" };
   const opts = { runningMode:"VIDEO", numHands:2,
                  minHandDetectionConfidence:0.5, minHandPresenceConfidence:0.5,
                  minTrackingConfidence:0.5 };
-  try{
-    landmarker = await withTimeout(HL.createFromOptions(fs, {baseOptions:base, ...opts}),
-                                   LOAD_TIMEOUT, "装配识别器");
-  }catch(e){
-    fails.push("用模型数据装配失败 → " + e.message + "（改用直接给地址再试一次）");
-    landmarker = await withTimeout(
-      HL.createFromOptions(fs, {baseOptions:{modelAssetPath:MODELS[MODELS.length-1], delegate:"GPU"}, ...opts}),
-      LOAD_TIMEOUT, "装配识别器（地址方式）");
+  outer:
+  for(const lib of LIBS){
+    const tag = lib.startsWith("./") ? "本地 lib/" : shortUrl(lib);
+    for(let attempt = 0; attempt < (lib.startsWith("./") ? 2 : 1); attempt++){
+      try{
+        S.loadStep = "取识别库 " + tag + (attempt ? "（重试）" : "");
+        const { FilesetResolver:FR, HandLandmarker:HL } =
+          await withTimeout(import(lib+"/vision_bundle.mjs"), LOAD_TIMEOUT, "识别库 "+tag);
+        const fs = await withTimeout(FR.forVisionTasks(lib+"/wasm"), LOAD_TIMEOUT, "wasm "+tag);
+        S.loadStep = "装配识别器（" + tag + "）";
+        const base = buf ? { modelAssetBuffer: buf, delegate:"GPU" }
+                         : { modelAssetPath: MODELS[MODELS.length-1], delegate:"GPU" };
+        landmarker = await withTimeout(HL.createFromOptions(fs, {baseOptions:base, ...opts}),
+                                       LOAD_TIMEOUT*2, "装配识别器 "+tag);
+        libName = lib.startsWith("./") ? "本地" : lib.split("@").pop();
+        break outer;
+      }catch(e){
+        fails.push("识别库 " + tag + (attempt ? "（重试）" : "") + " → " + (e && e.message || e));
+        landmarker = null;
+      }
+    }
   }
+  if(!landmarker) throw new Error("识别库没加载上（页面地址 " + location.href + "）：\n" + fails.join("\n"));
   S.lib = libName; S.loadStep = ""; S.libErr = fails.join("\n");
   if(camStream) pump();           // 摄像头已经先开了，模型到了就开始识别
 }
@@ -1637,6 +1771,16 @@ function read(res){
    （规则二十三栽过一次）。 */
 function rightHandDrawY(){
   if(!S.right) return null;
+  /* v63：跟谱时鸟跟着手，不跟着音。v62 让鸟飞到下一个音那条线上等 —— 人会下意识追着鸟抬手、压手，
+     弹到 1'、5 这类高音时手抬到画面顶上，指尖出画，捏了没反应；弹 3 时手压到很低，识别也变慢。
+     跟谱模式里手的高低本来就不管音高，所以鸟不该领着手走：鸟停在你手的高度，
+     正在响的音由那条枝亮起来表示，下一个要弹的音由那条枝泛橙表示。 */
+  if(S.gateMode === "follow" && tuneSeq().length) return cl(S.right.y, P_LO, P_HI);
+  if(S.gateMode === "finger"){
+    if(S.voice) return P_LO + FIELD*(1 - (S.midi - MIDI_LO)/SEMIS);          // v60：鸟和声音同一个数
+    const c = FINGER_SEMI[S.fingPos ?? 1].reduce((a,b)=>a+b,0)/4;            // v61：没出声时停在当前把位中间
+    return P_LO + FIELD*(1 - c/SEMIS);
+  }
   if(S.right.y < P_LO || S.right.y > P_HI) return S.right.y;
   return P_LO + FIELD*(1 - (S.midi - MIDI_LO)/SEMIS);
 }
@@ -1986,7 +2130,12 @@ function draw(){
     /* y 音高，x 音量。右手自己就是一把完整的特雷门琴，不依赖左手。 */
     S.tvVol = cl((S.right.x - TVOL0)/(TVOL1 - TVOL0));
     /* 捏合判定必须排在算音高之前 —— 起音那一帧要用它来决定吸附偏移。 */
-    if((nowMs - S.rT) < 120 && S.right.lm) S.pinch = pinchOf(S.right.lm);
+    if((nowMs - S.rT) < 120 && S.right.lm){
+      if(S.gateMode === "finger"){ const fp = fingerPick(S.right.lm); S.pinch = fp.d1; S.fpClear = fp.clear; S.fpK = fp.k; }
+      else if(S.gateMode === "follow"){ const L = S.right.lm; S.pinch = pinchOf(L);
+        S.fpClear = [4,8].every(i => L[i].y > 0.01 && L[i].y < 0.99 && L[i].x > 0.01 && L[i].x < 0.99); }   // v63：只看拇指尖和食指尖
+      else S.pinch = pinchOf(S.right.lm);
+    }
     if(S.gateMode === "open"){ S.voice = true; S.voiceN = 0; }
     else if((nowMs - S.rT) < 120 && S.right.lm && S.rT !== S.pinchT){
       /* 只在「这一帧是新识别出来的」时候数帧。draw() 一秒跑 60~120 次，
@@ -1994,15 +2143,43 @@ function draw(){
          于是同一条规则在 60Hz 屏上要两帧、在 120Hz 屏上只要一帧，
          等于这个参数的实际含义跟着显示器变。 */
       S.pinchT = S.rT;
-      const want = S.voice ? (S.pinch < PINCH_OFF) : (S.pinch < PINCH_ON);
+      const fm = S.gateMode === "finger";
+      const strict = fm || S.gateMode === "follow";
+      /* v60：出声中掌心明显挪进别的把位（越过分界 2 个半音，远大于手的漂移）＝有意换把：
+         先收声、换把位，并且要真松开一次才再出声 —— 不然拇指还贴着，新把位里会马上自己响。
+         原来是出声时把位一律冻住：手已经挪到上段、拇指没完全松开，档位还停在中段，鸟却飞上去了。 */
+      const palmY = P_LO + FIELD*(1 - (rawM - MIDI_LO)/SEMIS), u = fingerU(palmY);
+      if(fm && S.voice){
+        const p = S.fingPos ?? 1;
+        if((p < 2 && u > p + 1 + FINGER_SHIFT) || (p > 0 && u < p - FINGER_SHIFT)){
+          S.voice = false; S.voiceN = 0; S.fingPos = fingerPos(u); S.needRelease = true; }
+      }
+      if(fm && S.needRelease && S.pinch > FINGER_OFF) S.needRelease = false;
+      const want = S.voice ? (S.pinch < (strict ? FINGER_OFF : PINCH_OFF))
+                           : (S.pinch < (strict ? FINGER_ON : PINCH_ON) && (!strict || (S.fpClear && !S.needRelease)));
       if(want === S.voice) S.voiceN = 0;
-      else if(++S.voiceN >= (want ? PINCH_FRAMES_ON : PINCH_FRAMES_OFF)){
+      else if(++S.voiceN >= (want ? (strict ? FINGER_FRAMES_ON : PINCH_FRAMES_ON) : PINCH_FRAMES_OFF)){
         S.voiceN = 0; S.voice = want; if(want) S.voiceFlash = 1; }
+      if(S.gateMode === "finger"){
+        /* 不出声时换把位（带回差，免得在分界上抖）；出声时把位冻住 */
+        if(!S.voice || !S.voicePrev) S.fingPos = fingerPos(u, S.fingPos);
+        /* 换手指：没出声时立刻认；出声中要连续两帧都是新手指才算 —— 算的话重新起音 */
+        if(S.fpClear && S.fpK !== S.fingK){
+          if(!S.voicePrev || ++S.fingN >= 2){ if(S.voicePrev && S.voice) S.fingChange = true; S.fingK = S.fpK; S.fingN = 0; }
+        } else S.fingN = 0;
+      }
     }
-    const attack = S.voice && !S.voicePrev;
+    const attack = S.voice && (!S.voicePrev || !!S.fingChange);
+    S.fingChange = false;
     /* 出声和静音用的是同一个函数，所以画面和声音永远是同一个数。
        静音期间振荡器的频率是冻住的（见 applyTheremin），所以「无声换把位」还在。 */
-    S.midi = warp(rawM);
+    if(S.gateMode === "follow" && tuneSeq().length){
+      const seq = tuneSeq();
+      if(attack){ S.followMidi = seq[(S.fIdx||0) % seq.length]; S.fIdx = ((S.fIdx||0) + 1) % seq.length;
+                  if(S.fIdx === 0) S.followLoop = performance.now(); }
+      S.midi = S.voice ? S.followMidi : seq[(S.fIdx||0) % seq.length];      // 没出声时＝下一个要弹的音（鸟先飞过去等着）
+    }
+    else S.midi = (S.gateMode === "finger" && S.voice) ? fingerNote(S.fingK ?? 0, S.fingPos ?? 1) : warp(rawM);
     const now = performance.now();
     const dt  = S.lastT ? Math.min(0.1, (now-S.lastT)/1000) : 0.016;
     S.lastT = now;
@@ -2204,8 +2381,9 @@ function draw(){
       /* 竹节 */
       ctx.fillStyle = BAM(84,.75,10); ctx.fillRect(S.fb.x0 - S.fb.cw/2 - 2*k, yy-1.5*k, S.fb.cw+4*k, 3*k);
       drawBranch(ctx, bx0, bx1, yy, (oct?3.4:2.8)*k, 0.9*k,
-                 litB ? LIVE(1.05) : SCL(),
-                 S.birdX ?? 0, litB && S.birdX ? 3*k : 0);
+                 litB ? LIVE(1.05)
+                      : (S.gateMode === "follow" && !S.voice && Math.abs(S.midi - (MIDI_LO+m)) < 0.4) ? WILL(0.9) : SCL(),
+                 S.birdX ?? 0, litB && S.birdX && S.gateMode !== "follow" ? 3*k : 0);
       /* 叶：枝根一两片向上；沿途零星几片往下垂，避开鸟 */
       bambooLeaf(ctx, bx0+3*k, yy, 22*k, -0.6, BAM(60,.5,18));
       if(m%2===0) bambooLeaf(ctx, bx0+5*k, yy, 16*k, -1.0, BAM(60,.34,18));
@@ -2257,8 +2435,17 @@ function draw(){
     const T = TUNES[S.tune];
     const live = S.right && S.tvVol>0.02;
     const curJP = live ? SEMI_JP[Math.round(S.soundMidi - MIDI_LO) % 12] : null;
-    const bars = T.jp.split("|").map(b=>b.trim().split(/\s+/).filter(Boolean))
+    const allBars = T.jp.split("|").map(b=>b.trim().split(/\s+/).filter(Boolean))
                      .filter(b=>b.length);
+    /* v53：长谱分页 —— 最多显示 3 行，再多就盖到树冠了。← → 翻页 */
+    const PER_PAGE = 12, nPage = Math.max(1, Math.ceil(allBars.length / PER_PAGE));
+    /* v62：跟谱时数出每小节第一个音的序号，好找到「下一个音」在哪；并自动翻到它那页 */
+    const follow = S.gateMode === "follow", isN = t => /^[#b]?[1-7]/.test(t);
+    const barStart = []; { let c = 0; for(const b of allBars){ barStart.push(c); c += b.filter(isN).length; } }
+    if(follow && tuneSeq().length){ const nx = (S.fIdx||0); let gb = 0; while(gb+1 < allBars.length && barStart[gb+1] <= nx) gb++;
+      S.scorePage = Math.floor(gb / PER_PAGE); }
+    S.scorePage = Math.max(0, Math.min(nPage - 1, S.scorePage || 0));
+    const bars = allBars.slice(S.scorePage*PER_PAGE, S.scorePage*PER_PAGE + PER_PAGE);
     const sX0 = tvX0 + 30*k;              // 让开中间那根竹
     const PER_ROW = 4, availW = (R.x + R.w) - sX0;
     const barW = availW / PER_ROW, rowH2 = 34*k;
@@ -2270,7 +2457,7 @@ function draw(){
     ctx.fillStyle=SCL(1.1);
     ctx.fillText(T.name, sX0, yBase - 22*k);
     ctx.fillStyle=SCL(0.9);
-    ctx.fillText(T.note, sX0 + ctx.measureText(T.name).width + 14*k, yBase - 22*k);
+    ctx.fillText(T.note + (nPage > 1 ? `　第 ${S.scorePage+1}/${nPage} 页（← → 翻页）` : ""), sX0 + ctx.measureText(T.name).width + 14*k, yBase - 22*k);
 
     bars.forEach((bar, bi)=>{
       const col = bi % PER_ROW, row = (bi/PER_ROW)|0;
@@ -2280,16 +2467,33 @@ function draw(){
       ctx.beginPath(); ctx.moveTo(bx, by+2*k); ctx.lineTo(bx, by+24*k); ctx.stroke();
       const cellW = (barW - 16*k) / bar.length;
       ctx.textAlign="center"; ctx.textBaseline="top";
+      let ni = barStart[S.scorePage*PER_PAGE + bi] || 0;
       bar.forEach((tk,ti)=>{
+        const myIdx = isN(tk) ? ni++ : -1;
         const cx = bx + 11*k + cellW*(ti+0.5);
-        const base = tk.replace("'","");
+        /* v54：拆出时值 —— 「·」附点、「_」减时线；音高部分照旧 */
+        const ul = (tk.match(/_/g)||[]).length, dot = tk.includes("·");
+        const pitch = tk.replace(/[·_]/g,"");
+        const base = pitch.replace("'","");
         const isNote = base in JP_SEMI;
-        const hit = isNote && curJP === base;
-        ctx.fillStyle = hit    ? LIVE(1.15)
+        const hit = follow ? (myIdx >= 0 && S.voice && myIdx === ((S.fIdx||0) - 1 + tuneSeq().length) % Math.max(1,tuneSeq().length))
+                           : (isNote && curJP === base);
+        const nextUp = follow && !S.voice && myIdx === (S.fIdx||0);
+        if(nextUp){ ctx.save(); ctx.fillStyle = WILL(0.9); ctx.beginPath(); ctx.arc(cx, by + 30*k, 3*k, 0, 7); ctx.fill(); ctx.restore(); }
+        ctx.fillStyle = hit    ? LIVE(1.15) : nextUp ? WILL(1)
                       : isNote ? SCL()
                                : BODY(1.2);
-        ctx.font=`${(hit?22:19)*k}px -apple-system,"PingFang SC","Noto Sans CJK SC","Noto Sans CJK TC",sans-serif`;
-        ctx.fillText(tk, cx, by + (hit?1:3)*k);
+        const fs = (hit?22:19)*k, ty = by + (hit?1:3)*k;
+        ctx.font=`${fs}px -apple-system,"PingFang SC","Noto Sans CJK SC","Noto Sans CJK TC",sans-serif`;
+        ctx.fillText(pitch, cx, ty);
+        const pw = ctx.measureText(pitch).width;
+        if(dot){ ctx.beginPath(); ctx.arc(cx + pw/2 + 4*k, ty + fs*0.55, 1.8*k, 0, 7); ctx.fill(); }
+        if(ul){ ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 1.2*k;
+          /* 相邻的八分音符连成一条（简谱的写法），一拍之内连在一起 */
+          const ulOf = t => t ? (t.match(/_/g)||[]).length : 0, uL = ulOf(bar[ti-1]), uR = ulOf(bar[ti+1]);
+          for(let u=0; u<ul; u++){ const uy = ty + fs*1.02 + u*3.2*k;
+            const x0 = cx - cellW*(uL > u ? 0.5 : 0.38), x1 = cx + cellW*(uR > u ? 0.5 : 0.38);
+            ctx.beginPath(); ctx.moveTo(x0, uy); ctx.lineTo(x1, uy); ctx.stroke(); } }
       });
     });
     /* 末尾收一条小节线，谱子有头有尾 */
@@ -2299,6 +2503,20 @@ function draw(){
     ctx.beginPath(); ctx.moveTo(ex, ey+2*k); ctx.lineTo(ex, ey+24*k); ctx.stroke();
   }
 
+  /* v56：指法模式 —— 每条用得到的线在竹竿边标上手指名；当前把位的亮，另一个把位的淡 */
+  if(S.gateMode === "finger" && S.fb){
+    /* v57：把位互相重叠，一条线可能属于两个把位 —— 只标当前把位，免得一条线上挤两个字；
+       竹竿右边一道竖线标出当前把位管的范围 */
+    const pos = S.fingPos ?? 1, Ys = FINGER_SEMI[pos].map(sm => Y(P_LO + FIELD*(1 - sm/SEMIS)));
+    ctx.save();
+    ctx.strokeStyle = SCL(0.9); ctx.lineWidth = 2*k; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(S.fb.x0 + 10*k, Ys[0] + 6*k); ctx.lineTo(S.fb.x0 + 10*k, Ys[3] - 6*k); ctx.stroke();
+    ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    ctx.font = `${FS.s*k}px -apple-system,"PingFang SC","Noto Sans CJK SC","Noto Sans CJK TC",sans-serif`;
+    Ys.forEach((yy, i) => { const lit = S.voice && S.fingK === i;
+      ctx.fillStyle = lit ? LIVE(1.1) : SCL(1.1); ctx.fillText(FINGER_NAMES[i], S.fb.x0 + 16*k, yy - 11*k); });
+    ctx.restore();
+  }
   /* 两条线：细虚线＝手指到的音，实线＝实际在响的音。
      它们之间的距离就是滑音 —— 滑块拖大，实线会明显落在虚线后面。 */
   if(S.right){
@@ -2614,8 +2832,24 @@ cams.addEventListener("change", ()=>{ cams.checked ? startCam().catch(e=>fatal("
 ss.addEventListener("input",()=>{ S.snap=+ss.value/100; $("snapval").textContent=ss.value+"%"; });
 const tus=$("tune"), tos=$("tone"), des=$("dens"), scs=$("scale"), gts=$("gate");
 scs.addEventListener("change", ()=>{ S.scale = scs.value; });
-gts.addEventListener("change", ()=>{ S.gateMode = gts.value; });
-tus.addEventListener("change", ()=>{ S.tune=+tus.value; });
+gts.addEventListener("change", ()=>{ S.gateMode = gts.value; try{ localStorage.setItem("gi-gate", S.gateMode); }catch(e){} });
+try{ const g = localStorage.getItem("gi-gate"); if(g === "pinch" || g === "open" || g === "finger" || g === "follow"){ S.gateMode = g; gts.value = g; } }catch(e){}
+const TUNE_KEY = "gi-tune";
+function tuneShow(){ const c=$("custom"); if(c) c.style.display = S.tune===5 ? "block" : "none"; }
+tus.addEventListener("change", ()=>{ S.tune=+tus.value; S.fIdx = 0; tuneShow(); S.scorePage = 0;
+  try{ localStorage.setItem(TUNE_KEY, String(S.tune)); }catch(e){} });   // v55：选了哪首也记住
+{ /* v53：读回上次贴的谱子 */
+  try{ const v = JSON.parse(localStorage.getItem(CUSTOM_KEY) || "null");
+       if(v){ if($("cname")) $("cname").value = v.name||""; if($("ctext")) $("ctext").value = v.text||""; if($("cfold")) $("cfold").checked = v.fold !== false; } }catch(e){}
+  customApply(false);
+  try{ const v = localStorage.getItem(TUNE_KEY);
+       if(v !== null && !isNaN(+v) && (+v === -1 || TUNES[+v])){ S.tune = +v; tus.value = v; } }catch(e){}
+  tuneShow();
+  for(const id of ["cname","ctext"]){ const e=$(id); if(e && e.addEventListener) e.addEventListener("input", ()=>customApply(true)); }
+  const f=$("cfold"); if(f && f.addEventListener) f.addEventListener("change", ()=>customApply(true));
+  /* 在输入框里打字时，别让 R / H / D 这些快捷键被触发 */
+  for(const id of ["cname","ctext"]){ const e=$(id); if(e && e.addEventListener) e.addEventListener("keydown", ev=>ev.stopPropagation()); }
+}
 des.addEventListener("change", ()=>{ S.dens=+des.value; });
 function setGlide(ms){ S.glide=ms/1000; gs.value=ms; $("glideval").textContent=ms+" ms"; }
 gs.addEventListener("input",()=>setGlide(+gs.value));
@@ -2720,6 +2954,13 @@ addEventListener("keydown", e=>{
     case "KeyH": fold(); break;
     case "KeyC": cams.checked=!cams.checked; cams.dispatchEvent(new Event("change")); break;
     case "KeyR": if(!e.repeat) recToggle(); break;
+    case "KeyG": if(!e.repeat){ S.gateMode = S.gateMode === "follow" ? "pinch" : "follow"; gts.value = S.gateMode; S.fIdx = 0;
+                   try{ localStorage.setItem("gi-gate", S.gateMode); }catch(e2){} } break;
+    case "Home": S.fIdx = 0; break;
+    case "KeyF": if(!e.repeat){ S.gateMode = S.gateMode === "finger" ? "pinch" : "finger"; gts.value = S.gateMode;
+                   try{ localStorage.setItem("gi-gate", S.gateMode); }catch(e2){} } break;
+    case "ArrowRight": S.scorePage = (S.scorePage||0) + 1; break;
+    case "ArrowLeft":  S.scorePage = Math.max(0, (S.scorePage||0) - 1); break;
   }
 });
 function fold(open){
@@ -2754,7 +2995,7 @@ function fatal(short, detail){
 /* 截图回归用：没有摄像头的环境里喂假手，看画面有没有画坏。 */
 /* v47：对外接口。坐标一律从页面算，界面改了，用它的脚本跟着变，不用改脚本里的数。
    y 都是摄像头画面里的归一化坐标（read() 吃的那种）。 */
-globalThis.__gi = { S, read, draw, audio, applyTone, level, pulse, countIn, fingerExt,
+globalThis.__gi = { S, read, draw, audio, applyTone, level, pulse, countIn, fingerExt, fingerPick, fingerNote, fingerPos, fingerU, tuneSeq,
   rec:{ toggle:recToggle, state:()=>REC.st, mime:recMime },
   A:()=>({AC,master,osc,osc2,osc2Gain,tvGain}), C:{P_LO,FIELD,SEMIS,MIDI_LO,JP_SEMI},
   clock:{
