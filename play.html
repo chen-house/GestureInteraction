@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>手势乐器 v63</title>
+<title>手势乐器 v64</title>
 <style>
   :root{ --ink:#24382a; --paper:#B4C99C; --line:rgba(28,43,32,.22); --dim:#55644f;
          --hot:#9A4A18; --bar:62px;
@@ -172,6 +172,10 @@
       <option value="open">常开 · 手在就响（老办法）</option>
       <option value="finger">指法 · 四指 × 三把位（F 键）</option>
     </select>
+    <label style="display:flex;justify-content:space-between;cursor:pointer;margin-top:6px">
+      <span>跟谱时手的高低控制明暗（B 键）</span>
+      <input id="gi-bright" type="checkbox" checked style="accent-color:#46621F">
+    </label>
   </div>
   <div>
     <div class="lab"><span>音阶</span><span></span></div>
@@ -1297,7 +1301,7 @@ const cl = (v,a=0,b=1) => v<a?a:v>b?b:v;
 
 const level = LAYERS.map(()=>1);      // 每件乐器的音量 0..1
 const pulse = LAYERS.map(()=>0);
-const S = { glide:0.030, bpm:100, tone:0, soundMidi:60, lastT:0,
+const S = { bright:true, glide:0.030, bpm:100, tone:0, soundMidi:60, lastT:0,
             right:null, left:null, nHands:0,
             midi:60, tvVol:0, dVol:0, drawT:0, deck:0, deckWant:0, deckFlash:0, flick:0, flickDir:0,
             sD:-1, sT:0, okD:null, okV:0, hadLeft:false, lastY:null, lastYT:0, lSeen:-1, vy:0, card:-1, camErr:"",
@@ -1316,7 +1320,7 @@ const S = { glide:0.030, bpm:100, tone:0, soundMidi:60, lastT:0,
 
 /* ── 声音 ───────────────────────────────── */
 let AC=null, master=null, osc=null, osc2=null, osc2Gain=null, strikeBus=null, beatHz=0,
-    tvGain=null, tvFilter=null, vibLfo=null, vibAmt=null,
+    tvGain=null, tvFilter=null, brightF=null, vibLfo=null, vibAmt=null,
     busses=null, seqT=null, step=0, nextT=0;
 /* 四个音色：振荡器波形 + 低通截止 + 颤音深度（相对基频的比例） */
 /* ───── 音色 ─────
@@ -1395,6 +1399,23 @@ function audition(){
 }
 /* 敲一下：按当前音色的模态表，起一组各自衰减的正弦。
    每个音是一次性的一组节点，放完自己停 —— 不留任何常驻状态。 */
+/* v64：明暗 —— 只在跟谱模式、勾选时生效（跟谱里手的高低不管音高，正好空着）。
+   手高＝亮，手低＝暗。截止频率跟着当前音走（基频的 BRIGHT_LO~BRIGHT_HI 倍），
+   这样高音、低音在同一个手高下明暗一样，而且最暗也留住基频，不会变成「变小声」。
+   指数映射：耳朵对频率是按倍数听的。 */
+const BRIGHT_LO = 1.5, BRIGHT_HI = 16;
+function brightU(y){ return 1 - cl((cl(y, P_LO, P_HI) - P_LO)/(P_HI - P_LO)); }
+function brightCut(midi, u){
+  const f0 = 440*Math.pow(2,(midi-69)/12);
+  return Math.min(18000, f0 * BRIGHT_LO * Math.pow(BRIGHT_HI/BRIGHT_LO, cl(u)));
+}
+function applyBright(){
+  const on = S.bright && S.gateMode === "follow" && S.right;
+  S.brightU = on ? brightU(S.right.y) : null;
+  if(!brightF || !AC) return;
+  const target = on ? brightCut(S.midi, S.brightU) : 20000;
+  brightF.frequency.setTargetAtTime(target, AC.currentTime, 0.04);
+}
 function strike(midi, vel){
   if(!AC || AC.state !== "running") return 0;
   const t0 = tone(); if(t0.kind !== "struck" || !strikeBus) return 0;
@@ -1422,7 +1443,11 @@ async function audio(){
     osc = AC.createOscillator();
     tvFilter = AC.createBiquadFilter(); tvFilter.type = "lowpass"; tvFilter.Q.value = 0.7;
     tvGain = AC.createGain(); tvGain.gain.value = 0;
-    osc.connect(tvFilter).connect(tvGain).connect(master); osc.start();
+    /* v64：明暗。右手的两条声音（持续 + 敲击）先过一个低通再进总线；
+       不开的时候截止在 20kHz，等于没有。鼓不经过它。 */
+    brightF = AC.createBiquadFilter(); brightF.type = "lowpass"; brightF.Q.value = 0.7;
+    brightF.frequency.value = 20000; brightF.connect(master);
+    osc.connect(tvFilter).connect(tvGain).connect(brightF); osc.start();
     /* 第二个振荡器稍微失谐，和第一个打慢拍 —— 持续类「活」不活全在这儿 */
     /* 第二个振荡器必须有自己的音量，而且要比第一个小得多。
        两个等大的振荡器相加：频率差 0.7Hz（玻璃）时每 1.4 秒完全抵消一次 ——
@@ -1432,7 +1457,7 @@ async function audio(){
     osc2Gain = AC.createGain(); osc2Gain.gain.value = 0;
     osc2 = AC.createOscillator(); osc2.connect(osc2Gain).connect(tvFilter); osc2.start();
     /* 敲击类自己的总线：每个音是一次性的一组节点，走这里汇总 */
-    strikeBus = AC.createGain(); strikeBus.gain.value = 1; strikeBus.connect(master);
+    strikeBus = AC.createGain(); strikeBus.gain.value = 1; strikeBus.connect(brightF);
     /* 颤音：低频振荡器去推主振荡器的频率。真特雷门琴的「人声感」主要来自这个 */
     vibLfo = AC.createOscillator(); vibLfo.type="sine"; vibLfo.frequency.value = 5.5;
     vibAmt = AC.createGain(); vibAmt.gain.value = 0;
@@ -2180,6 +2205,7 @@ function draw(){
       S.midi = S.voice ? S.followMidi : seq[(S.fIdx||0) % seq.length];      // 没出声时＝下一个要弹的音（鸟先飞过去等着）
     }
     else S.midi = (S.gateMode === "finger" && S.voice) ? fingerNote(S.fingK ?? 0, S.fingPos ?? 1) : warp(rawM);
+    applyBright();
     const now = performance.now();
     const dt  = S.lastT ? Math.min(0.1, (now-S.lastT)/1000) : 0.016;
     S.lastT = now;
@@ -2834,6 +2860,10 @@ const tus=$("tune"), tos=$("tone"), des=$("dens"), scs=$("scale"), gts=$("gate")
 scs.addEventListener("change", ()=>{ S.scale = scs.value; });
 gts.addEventListener("change", ()=>{ S.gateMode = gts.value; try{ localStorage.setItem("gi-gate", S.gateMode); }catch(e){} });
 try{ const g = localStorage.getItem("gi-gate"); if(g === "pinch" || g === "open" || g === "finger" || g === "follow"){ S.gateMode = g; gts.value = g; } }catch(e){}
+const brs = $("bright");
+function setBright(v){ S.bright = !!v; brs.checked = S.bright; try{ localStorage.setItem("gi-bright", S.bright ? "1" : "0"); }catch(e){} }
+brs.addEventListener("change", () => setBright(brs.checked));
+try{ const b = localStorage.getItem("gi-bright"); if(b === "0" || b === "1") setBright(b === "1"); }catch(e){}
 const TUNE_KEY = "gi-tune";
 function tuneShow(){ const c=$("custom"); if(c) c.style.display = S.tune===5 ? "block" : "none"; }
 tus.addEventListener("change", ()=>{ S.tune=+tus.value; S.fIdx = 0; tuneShow(); S.scorePage = 0;
@@ -2954,6 +2984,7 @@ addEventListener("keydown", e=>{
     case "KeyH": fold(); break;
     case "KeyC": cams.checked=!cams.checked; cams.dispatchEvent(new Event("change")); break;
     case "KeyR": if(!e.repeat) recToggle(); break;
+    case "KeyB": if(!e.repeat) setBright(!S.bright); break;
     case "KeyG": if(!e.repeat){ S.gateMode = S.gateMode === "follow" ? "pinch" : "follow"; gts.value = S.gateMode; S.fIdx = 0;
                    try{ localStorage.setItem("gi-gate", S.gateMode); }catch(e2){} } break;
     case "Home": S.fIdx = 0; break;
@@ -2995,7 +3026,7 @@ function fatal(short, detail){
 /* 截图回归用：没有摄像头的环境里喂假手，看画面有没有画坏。 */
 /* v47：对外接口。坐标一律从页面算，界面改了，用它的脚本跟着变，不用改脚本里的数。
    y 都是摄像头画面里的归一化坐标（read() 吃的那种）。 */
-globalThis.__gi = { S, read, draw, audio, applyTone, level, pulse, countIn, fingerExt, fingerPick, fingerNote, fingerPos, fingerU, tuneSeq,
+globalThis.__gi = { S, read, draw, audio, applyTone, applyBright, brightF: () => brightF, level, pulse, countIn, fingerExt, fingerPick, fingerNote, fingerPos, fingerU, tuneSeq,
   rec:{ toggle:recToggle, state:()=>REC.st, mime:recMime },
   A:()=>({AC,master,osc,osc2,osc2Gain,tvGain}), C:{P_LO,FIELD,SEMIS,MIDI_LO,JP_SEMI},
   clock:{
