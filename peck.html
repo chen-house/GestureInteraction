@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>竹林乐团 v42</title>
+<style>
+  :root{ --ink:#16281C; --paper:#EDF1E8; --line:rgba(22,40,28,.22); --dim:#4D6150; --hot:#1F5E57; }
+  *{ box-sizing:border-box; } html,body{ height:100%; }
+  body{ margin:0; background:var(--paper); color:var(--ink); overflow:hidden;
+        font:13px/1.7 -apple-system,"PingFang SC","Noto Sans CJK SC","Noto Sans CJK TC",sans-serif; }
+  #wg-gl{ display:block; position:fixed; inset:0; width:100vw; height:100vh; }
+  #wg-grain{ position:fixed; inset:0; pointer-events:none; mix-blend-mode:multiply; background-size:160px 160px; }
+  #wg-hint{ position:fixed; left:50%; top:9vh; transform:translateX(-50%); pointer-events:none; font-size:16px; letter-spacing:.06em;
+    color:var(--paper); background:rgba(22,40,28,.78); padding:8px 20px; border-radius:999px; opacity:0; transition:opacity .5s; white-space:nowrap; }
+  #wg-hint.on{ opacity:1; }
+  #wg-hud{ position:fixed; left:28px; top:20px; pointer-events:none; letter-spacing:.1em; opacity:.45;
+    text-shadow:0 0 6px var(--paper), 0 0 12px var(--paper); }
+  #wg-nav{ position:fixed; right:28px; top:20px; z-index:31; letter-spacing:.1em; opacity:.6; text-shadow:0 0 6px var(--paper), 0 0 12px var(--paper), 0 0 3px var(--paper); } #wg-nav a{ color:var(--ink); text-decoration:none; margin-left:18px; opacity:.6; } #wg-nav a:hover{ opacity:1; } #wg-nav b{ font-weight:400; border-bottom:1px solid var(--ink); }
+  #wg-note{ position:fixed; left:28px; bottom:18px; right:28px; pointer-events:none; font-size:11px; color:var(--hot); opacity:.8; }
+  #wg-start{ position:fixed; inset:0; z-index:30; display:flex; align-items:center; justify-content:center; background:var(--paper); }
+  #wg-start[hidden]{ display:none; }
+  #wg-start .card{ text-align:center; max-width:460px; padding:0 28px; }
+  #wg-start h1{ font-size:20px; font-weight:400; letter-spacing:.3em; margin:0 0 12px; }
+  #wg-start p{ font-size:12.5px; line-height:2; color:var(--dim); margin:0 0 26px; }
+  #wg-go{ font:inherit; letter-spacing:.1em; color:var(--ink); background:none; border:1px solid var(--line); border-radius:3px; padding:11px 30px; cursor:pointer; }
+  #wg-go:hover{ border-color:var(--hot); color:var(--hot); }
+  #wg-why{ margin:18px 0 0; font-size:11px; color:var(--hot); min-height:1em; }
+</style>
+</head>
+<body data-chapter="peck">
+<canvas id="wg-gl"></canvas>
+<div id="wg-grain"></div>
+<div id="wg-hud"></div>
+<div id="wg-hint"></div>
+<div id="wg-note"></div>
+
+<div id="wg-start"><div class="card">
+  <h1>竹林乐团</h1>
+  <p>你是指挥。<br>张着手左右移动，一道光跟着你；光落在谁身上，伸一根手指请它来（两根、三根更密）；握拳，请它走。两只手一起握拳，起风。<br>需要摄像头看你的手，声音也在这一下里打开。</p>
+  <button id="wg-go">开始</button>
+  <p id="wg-why"></p>
+</div></div>
+<script type="module" src="lib/windgrove.mjs"></script>
+</body>
+</html>
